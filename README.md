@@ -20,3 +20,5 @@ Select -- retrieve tuples from one or more relations.
 Update -- update zero or more tuples in a single relation.
 
 The MDB is built upon Berkeley DB (BDB) Java Edition, a Java-based inverted file system. 
+
+See http://www.cs.utexas.edu/users/dsb/cs386d/Projects/Projects2-4.html#Project3
