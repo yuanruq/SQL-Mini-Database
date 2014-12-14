@@ -1,0 +1,22 @@
+mdb bug list
+open "don"; 引号去除
+
+
+
+select * from table
+where a.x = b.y and c.x = d.y
+
+update delete 没where的情况???
+
+
+
+
+
+
+
+
+
+
+
+
+

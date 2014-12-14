@@ -1,0 +1,345 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+
+<head>
+  <title>A Simple HOWTO for Using Berkeley DB Java Edition on the Android Platform</title>
+</head>
+
+<body>
+
+<div class="docMain">
+<center>
+<h1>A Simple HOWTO for Using<br>
+Berkeley DB Java Edition<br>on the<br>Android Platform</h1>
+</center>
+
+<!-- Note: RELEASE_VERSION and DATE are set by ant -->
+<p class="releaseInfo">5.0.103, January 16, 2014</p>
+
+<h2><a name="overview">Overview</a></h2>
+<p>
+JE can be used with the
+<a href="http://developer.android.com/index.html">Google Android</a>
+platform.  This document discusses how to create a simple program and
+UI which will allow a user to do trivial JE "gets" and "puts" from
+within Android.
+</p>
+
+<h2>Installation</h2>
+<ul>
+<li>
+Start by <a href="http://developer.android.com/sdk/index.html">downloading</a>
+and installing the Android SDK.  Put the Android "tools" directory in your path
+so that you pick up the command line tools.
+</li>
+<li>
+Locate the je-android-x.y.z.jar file in the <code>JE_HOME/lib</code> directory of the
+release you are using.
+</li>
+<li>
+Review
+<code>&lt;android-home&gt;/docs/guide/tutorials/hello-world.html</code>
+ for instructions on how to install the SDK and the Android plugin
+(if you're using Eclipse).<br><br>
+</li>
+</ul>
+
+<h2>Steps With Android Eclipse Plugin</h2>
+<ul>
+<li>
+Go to <code>"File->New->Project->Android->Android Project->Next
+Project"</code>.  Then provide a Project name (JEExample),
+application name (JEExample),
+package name (<code>com.sleepycat.je</code>), and activity name
+(<code>JEExample</code>).  Click Finish.
+</li><br><br>
+<li>
+Add the je-android-x.y.z.jar file to the project libs directory: <code>&lt;eclipse-je-android-dir&gt;/libs</code>.  You may have to create the <code>libs</code> directory.
+</li><br><br>
+<li>
+Copy
+<br><br><code>JEExample.java</code> to <code>&lt;eclipse-je-android-dir&gt;/src/com/sleepycat/je</code>,
+<br><code>main.xml</code> to <code>res/layout/main.xml</code> and
+<br><code>strings.xml</code> to <code>res/values/strings.xml</code><br><br>
+These files are shown at the bottom of this page.
+</li><br><br>
+<li>
+Build a new Configure Launch for this project, then run it as an
+Android project.
+</li>
+</ul>
+
+<h2>Steps Without Android Eclipse Plugin</h2>
+<ul>
+<li>
+If you haven't already made an AVD, do<br><br>
+<code>android create avd --target 2 --name my_avd</code>
+<br><br>
+Target 2 is Android 1.6, but you can "android list target" to see a list of
+available targets.  Then, with your current directory being a place where you
+want to create your project, do<br><br>
+<code>android create project --path JEExample --package com.sleepycat.je --name JEExample --activity JEExample --target 2</code>
+<br><br>
+This creates <code>JEExample/src/com/sleepycat/je/JEExample.java</code>
+</li><br><br>
+<li>
+Copy the je-android-x.y.z.jar file to the project libs directory: <code>JEExample/libs</code>
+</li><br><br>
+<li>
+Replace the generated contents of <code>JEExample/src/com/sleepycat/je/JEExample.java</code>,
+<code>JEExample/res/layout/main.xml</code>, <code>JEExample/res/values/strings.xml</code>
+with the source code for <code>JEExample.java</code>, <code>main.xml</code>
+and <code>strings.xml</code> shown at the bottom of this page.
+</li><br><br>
+<li>
+Go to the <code>&lt;android-installation-home&gt;/platform-tools/</code>, open and edit the <code>dx.bat</code> file,
+and change the line which says "<code>set javaOpts=</code>" to
+"<code>set javaOpts=-Xmx512M</code>".
+</li><br><br>
+<li>
+Run the Android emulator.
+</li><br><br>
+<li>
+In the <code>JEExample</code> directory, do<br><br>
+<code>ant debug install</code><br><br>
+This will compile <code>JEExample.java</code> as well as convert the resulting class files
+to dex files.  This also creates <code>JEExample/bin/JEExample-debug.apk</code>
+and installs this application on the emulator.<br><br>
+</li><br>
+</ul>
+
+<h2>Run the test</h2>
+<ul>
+<li>
+Create the JE environment directory by doing:
+<br><br><code>adb shell mkdir /data/local/je</code><br><br>
+You can remove the JE Environment files by doing:
+<br><br><code>adb shell rm /data/local/je/*</code>
+</li><br><br>
+<li>
+Run the JEExample application in the emulator by clicking on the Home
+icon, then the uparrow button above the Menu button, then JEExample icon.
+A screen
+titled "JEExample" should appear with a TextEdit box, a "Put Data" button,
+and a "Get Data" button.
+</li><br><br>
+<li>
+Put some key/data pairs into the JE database by entering (e.g.)
+<br><br><code>k1/data1</code><br><br>
+and pressing the "Put Data" button.
+</li><br><br>
+<li>
+Retrieve ("get") key/data pairs from the JE database by entering (e.g.)
+<br><br><code>k1</code><br><br>
+and pressing the "Get Data" button.
+</ul>
+
+<h2>Source Code</h2>
+<ul>
+<li>
+JEExample.java
+<pre>
+<code>
+package com.sleepycat.je;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
+import android.util.Log;
+import android.os.Bundle;
+import android.view.View;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.TextView;
+
+import java.io.File;
+
+import com.sleepycat.je.Database;
+import com.sleepycat.je.DatabaseConfig;
+import com.sleepycat.je.DatabaseEntry;
+import com.sleepycat.je.DatabaseException;
+import com.sleepycat.je.Environment;
+import com.sleepycat.je.EnvironmentConfig;
+import com.sleepycat.je.OperationStatus;
+import com.sleepycat.je.Transaction;
+
+public class JEExample extends Activity {
+
+    @Override
+    public void onCreate(Bundle icicle) {
+        super.onCreate(icicle);
+
+        try {
+            final File envDir = new File("/data/local/je");
+            final EnvironmentConfig envConfig = new EnvironmentConfig();
+            envConfig.setTransactional(true);
+            envConfig.setAllowCreate(true);
+            final Environment env = new Environment(envDir, envConfig);
+            final DatabaseConfig dbConfig = new DatabaseConfig();
+            dbConfig.setTransactional(true);
+            dbConfig.setAllowCreate(true);
+            dbConfig.setSortedDuplicates(true);
+            final Database db = env.openDatabase(null, "exampledb", dbConfig);
+
+            setContentView(R.layout.main);
+            final Button button1 = (Button) findViewById(R.id.do_put);
+            button1.setOnClickListener(new Button.OnClickListener() {
+                public void onClick(View v) {
+
+                    final EditText editText =
+                        (EditText) findViewById(R.id.entry);
+                    final String keyData = editText.getText().toString();
+                    final int idx = keyData.indexOf("/");
+                    String key = null;
+                    String data = null;
+                    String result = null;
+                    if (idx < 0) {
+                        result = "enter key/data to put";
+                    } else {
+                        key = keyData.substring(0, idx);
+                        data = keyData.substring(idx + 1);
+                        result = key + "/" + data;
+                        final DatabaseEntry keyEntry =
+                            new DatabaseEntry(key.getBytes());
+                        final DatabaseEntry dataEntry =
+                            new DatabaseEntry(data.getBytes());
+
+                        try {
+                            final Transaction txn =
+                                env.beginTransaction(null, null);
+                            final OperationStatus res =
+                                db.put(txn, keyEntry, dataEntry);
+                            if (res != OperationStatus.SUCCESS) {
+                                result = "Error: " + res.toString();
+                            }
+                            txn.commit();
+                        } catch (DatabaseException DE) {
+                            result = "Caught exception: " + DE.toString();
+                        }
+                    }
+                    Log.d("JE", "did put of: " + result);
+
+                    if (result.contains("Caught exception:")) {
+                    	new AlertDialog.Builder(JEExample.this).
+                    	    setTitle("Put Data").setMessage(result).
+                    	    setPositiveButton("Quit", new DialogInterface.OnClickListener() {
+                    		    public void onClick(DialogInterface dialog, int whichButton) {
+                    		    }
+                    		}).show();
+                    } else {
+                    	new AlertDialog.Builder(JEExample.this).
+                	        setTitle("Put Data").setMessage("You put the key/data pair: " + result).
+                	        setPositiveButton("Confirm", new DialogInterface.OnClickListener() {
+                		        public void onClick(DialogInterface dialog, int whichButton) {
+                		        }
+                		    }).show();
+                    }
+                }
+            });
+
+            final Button button2 = (Button) findViewById(R.id.do_get);
+            button2.setOnClickListener(new Button.OnClickListener() {
+                public void onClick(View v) {
+
+                    final EditText editText =
+                        (EditText) findViewById(R.id.entry);
+                    final String key = editText.getText().toString();
+                    final DatabaseEntry keyEntry =
+                        new DatabaseEntry(key.getBytes());
+                    final DatabaseEntry dataEntry = new DatabaseEntry();
+                    String result = null;
+                    try {
+                        final Transaction txn =
+                            env.beginTransaction(null, null);
+                        final OperationStatus res =
+                            db.get(txn, keyEntry, dataEntry, null);
+                        if (res != OperationStatus.SUCCESS) {
+                            result = "Error: " + res.toString();
+                        } else {
+                            result = new String(dataEntry.getData());
+                        }
+                        txn.commit();
+                    } catch (DatabaseException DE) {
+                        result = "Caught exception: " + DE.toString();
+                    }
+                    Log.d("JE", "did get of: " + result);
+                    if (result.contains("Caught exception:")) {
+                    	new AlertDialog.Builder(JEExample.this).
+                	        setTitle("Get Data").setMessage(result).
+                	        setPositiveButton("Quit", new DialogInterface.OnClickListener() {
+                		        public void onClick(DialogInterface dialog, int whichButton) {
+                		        }
+                		    }).show();
+                    } else {
+                    	new AlertDialog.Builder(JEExample.this).
+                	        setTitle("Get Data").setMessage("Get result: " + result).
+                	        setPositiveButton("Confirm", new DialogInterface.OnClickListener() {
+                		        public void onClick(DialogInterface dialog, int whichButton) {
+                		        }
+                		    }).show();
+                    }
+                }
+            });
+        } catch (Exception DE) {
+            TextView tv = new TextView(this);
+            tv.setText("blew chunks " + DE);
+            setContentView(tv);
+        }
+    }
+}
+</code>
+</pre>
+<li>
+res/layout/main.xml
+<pre>
+<code>
+&lt;?xml version="1.0" encoding="utf-8"?&gt;
+&lt;LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    &gt;
+
+  &lt;TextView android:id="@+id/label"
+    android:layout_width="fill_parent"
+    android:layout_height="wrap_content"
+    android:text="JEExample"
+    /&gt;
+
+  &lt;EditText android:id="@+id/entry"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:background="@android:drawable/editbox_background"
+            android:layout_below="@id/label"
+    /&gt;
+
+  &lt;Button android:id="@+id/do_put"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:text="@string/button_put"
+    /&gt;
+
+  &lt;Button android:id="@+id/do_get"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:text="@string/button_get"
+    /&gt;
+&lt;/LinearLayout&gt;
+</code>
+</pre>
+</li>
+<li>
+res/values/strings.xml
+<pre>
+<code>
+&lt;?xml version="1.0" encoding="utf-8"?&gt;
+&lt;resources&gt;
+    &lt;string name="app_name"&gt;JEExample&lt;/string&gt;
+    &lt;string name="button_put"&gt;Put Data&lt;/string&gt;
+    &lt;string name="button_get"&gt;Get Data&lt;/string&gt;
+&lt;/resources&gt;
+</code>
+</pre>
+</li>
+</ul>
+Please report bugs to the <a href="http://forums.oracle.com/forums/forum.jspa?forumID=273">Berkeley DB Java Edition OTN forum</a>.

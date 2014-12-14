@@ -1,0 +1,40 @@
+create table buyer(
+buyer_id int,
+buyer_name str);
+.
+create table products(
+p_id int,
+p_name str);
+.
+create table products_sale(
+sale_id int,
+pid int,
+sold int,
+buyerid int);
+.
+index buyer.buyer_name;
+.
+insert into buyer values (2276,"gnhxdhqpiocksmyyuiaffiskmrvl");
+.
+insert into buyer values (2277,"snuixaamhyydolcbvqf");
+.
+insert into buyer values (2278,"baflx");
+.
+insert into buyer values (2279,"sfcjkadkrldlftwwyxmi");
+.
+insert into buyer values (2280,"eiqttvrrqunozjlnkip");
+.
+insert into buyer values (2281,"sxiusmefo");
+.
+insert into buyer values (2282,"mpfymzyacqyyfknxtefm");
+.
+insert into buyer values (2283,"pkqbwvuyhedhwsanxknejgv");
+.
+insert into buyer values (2284,"fvbzxzruyzombslhcejmrytixlxnlh");
+.
+insert into buyer values (2285,"vfsauumtgdstxlluzoxqaeo");
+.
+insert into buyer values (2286,"dgymjh");
+.
+insert into buyer values (2287,"qero");
+.

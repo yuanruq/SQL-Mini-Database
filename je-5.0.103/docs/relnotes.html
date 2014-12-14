@@ -1,0 +1,131 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+
+<head>
+  <title>Berkeley DB Java Edition Release Notes</title>
+</head>
+
+<body>
+
+<div class="docMain">
+<center>
+<h1>Oracle Berkeley DB Java Edition 11g R2<br>
+Release Notes</h1>
+</center>
+
+<!-- Note: RELEASE_VERSION and DATE are set by ant -->
+<p class="releaseInfo">Library 11.2.5.0, Release 5.0.103, January 16, 2014</p>
+
+<h2><a name="overview">Overview</a></h2>
+<p>
+Berkeley DB Java Edition (JE) is a 100% pure Java embedded,
+transactional data store. It supplies a key/object data model with
+indexing, full transactional ACID support, POJO APIs and High Availability/Replication.
+</p>
+<p>
+This is release 5.0.103 of Berkeley DB Java Edition.  This release
+includes a file format change, and there are two important notes to be aware
+of.
+<ol>
+    <li>
+    The file format change enabled significant improvements in operation
+    performance, memory and disk footprint, and concurrency of databases with
+    duplicate keys. Due to these changes, an upgrade utility must be run before
+    opening an environment with this release, if the environment was created
+    using JE 4.1 or earlier. See the Upgrade Procedure of the change log for
+    more information.
+    </li>
+    <li>
+    An application which uses JE replication may not upgrade directly from JE
+    4.0 to JE 5.0. Instead, the upgrade must be done from JE 4.0 to JE 4.1 and
+    then to JE 5.0. Applications already at JE 4.1 are not affected. Upgrade
+    guidance can be found in the new chapter, "Upgrading a JE Replication
+    Group", in the "Getting Started with BDB JE High Availability" guide.
+    </li>
+</ol>
+<p>
+A number of enhancements have been added since version JE 4.1, including:
+<ul>
+    <li>
+    The new <code>DiskOrderedCursor</code> class can be used to iterate over
+    all records in a database, for increased performance when transactional
+    guarantees are not required.  [#15260]
+    </li>
+    <li>
+    A new <code>Environment.preload</code> method can be used to preload
+    multiple databases at a time, for increased performance compared to
+    preloading each database individually. [#18153]
+    </li>
+    <li>
+    The JE environment can now be spread across multiple subdirectories to take
+    advantage of multiple disks or file systems. [#19125]
+    </li>
+    <li>
+    The new <code>AppStateMonitor</code> class lets the HA application add more
+    application specific information to the notion of node state in a
+    replication group.  [#18046]
+    </li>
+    <li>
+    New options have been added for changing the host of a JE replication node,
+    and for moving a JE replication group. See the Utilities section of the
+    change log.
+    </li>
+    <li>
+    Replicated nodes can now be opened in UNKNOWN state, to support read only
+    operations in a replicated system when a master is not available.  [#19338]
+    </li>
+    <li>
+    New <code>Cursor</code> methods were added to allow quickly skipping over a
+    specified number of key/value pairs.  [#19165]
+    </li>
+    <li>
+    A per-Environment <code>ClassLoader</code> may now be configured and will
+    be used by JE for loading all user-supplied classes. [#18368]
+    </li>
+    <li>
+    The <code>java.io.Closeable</code> interface is now implemented by all JE
+    classes and interfaces with a <code>public void close()</code> method.
+    This allows using these objects with the Java 1.7 try-with-resources
+    statement. [#20559]
+    </li>
+    <li>
+    The <code>Environment.flushLog</code> method has been added. It can be used
+    to make durable, by writing to the log, all preceding non-transactional
+    write operations, without performing a checkpoint. [#19111]
+    </li>
+    <li>
+    Performance of record update and deletion operations has been significantly
+    improved when the record is not in the JE cache and the application does
+    not need to read the record prior to performing the update or deletion.
+    [#18633]
+    </li>
+    <li>
+    An internal format change was made for databases with duplicate keys that
+    improves operation performance, reduces memory and disk overhead, and
+    increases concurrency.  [#19165]
+    </li>
+    <li>
+    An improvement has been made that requires significantly less writing per
+    checkpoint, less writing during eviction, and less metadata overhead in the
+    JE on-disk log files.  [#19671]
+    </li>
+    <li>
+    Improved <code>DbCacheSize</code> utility to take into account memory
+    management enhancements and improve accuracy. Added support for key
+    prefixing, databases configured for sorted duplicates, and replicated
+    environments.  [#20145]
+    </li>
+    <li>
+    <code>EnvironmentConfig.TREE_COMPACT_MAX_KEY_LENGTH</code> was added for
+    user configuration of the in-memory compaction of keys in the Btree.
+    [#20120]
+    </li>
+</ul>
+For the the complete and detailed list of changes, see
+<a href="changelog.html">the change log page</a>.<br>
+</p>
+<font size="1">Copyright (c) 1996, 2014 Oracle and/or its affiliates.  All rights reserved.</font>
+</div>
+<!-- end docMain -->
+</body>
+</html>

@@ -1,0 +1,2883 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<!-- Note: RELEASE_VERSION and DATE are set by ant -->
+
+<head>
+  <title>The Berkeley DB Java Edition Package: BDB JE Library Version
+  11.2.5.0 (Release 5.0.103) Change Log</title>
+  <meta name="description"
+        content="Berkeley DB, Java Edition: A database programmatic toolkit.">
+  <meta name="keywords"
+        content="embedded,database,programmatic,toolkit,b+tree,btree,transaction,transactions,locking,access method,access methods,java">
+</head>
+<body bgcolor="white">
+
+<h2 align="center">Oracle Berkeley DB Java Edition 11G R2 Change Log
+</h2>
+<p align="center">Library Version 11.2.5.0,  Release 5.0.103</p>
+
+<!-- =================================================== -->
+<h3><a name="FileFormat">Log File On-Disk Format Changes:</a></h3>
+JE 5.0.103 has moved to on-disk file format 8.
+<p>
+The change is forward compatible in that JE files created with release
+4.1 and earlier can be read when opened with JE 5.0.103. The
+change is not backward compatible in that files created with JE 5.0
+cannot be read by earlier releases. Note that if an existing
+environment is opened read/write, a new log file is written by JE 5.0
+and the environment can no longer be read by earlier releases.
+<p>
+There are two important notes about the file format change.
+<ol>
+    <li>
+    The file format change enabled significant improvements in operation
+    performance, memory and disk footprint, and concurrency of databases with
+    duplicate keys. Due to these changes, an upgrade utility must be run before
+    opening an environment with this release, if the environment was created
+    using JE 4.1 or earlier. See the Upgrade Procedure below for more
+    information.
+    </li>
+    <li>
+    An application which uses JE replication may not upgrade directly from JE
+    4.0 to JE 5.0. Instead, the upgrade must be done from JE 4.0 to JE 4.1 and
+    then to JE 5.0. Applications already at JE 4.1 are not affected. Upgrade
+    guidance can be found in the new chapter, "Upgrading a JE Replication
+    Group", in the "Getting Started with BDB JE High Availability" guide.
+    </li>
+</ol>
+
+<h3>Upgrade Procedure</h3>
+
+Due to the format changes in JE 5, a special utility program must be run for an
+environment created with JE 4.1 or earlier, prior to opening the environment
+with JE 5.0 or later.  The utility program is part of JE 4.1.  JE 4.1.20, or a
+later version of JE 4.1, must be used.
+<p>
+One of two utility programs must be used, which are available in the release
+package for JE 4.1.20, or a later release of JE 4.1.  If you are currently
+running a release earlier than JE 4.1.20, then you must download the latest JE
+4.1 release package in order to run these utilities.
+<p>
+The steps for upgrading are as follows.
+<ol>
+    <li>Stop the application using BDB JE.</li>
+    <li>Run the DbPreUpgrade_4_1 or DbRepPreUpgrade_4_1 utility.
+        If you are using a regular non-replicated <code>Environment</code>:
+<pre>    java -jar je-4.1.20.jar DbPreUpgrade_4_1 -h &lt;dir&gt;</pre>
+        If you are using a JE <code>ReplicatedEnvironment</code>:
+<pre>    java -jar je-4.1.20.jar DbRepPreUpgrade_4_1
+         -h &lt;dir&gt;
+         -groupName &lt;group name&gt;
+         -nodeName &lt;node name&gt;
+         -nodeHostPort &lt;host:port&gt;</pre></li>
+    <li>Finally, start the application using the current JE 5.0 (or later)
+    release of BDB JE.</li>
+</ol>
+<p>
+The second step -- running the utility program -- does not perform data
+conversion.  This step simply performs a special checkpoint to prepare the
+environment for upgrade.  It should take no longer than an ordinary startup and
+shutdown.
+<p>
+During the last step -- when the application opens the JE environment using the
+current release (JE 5 or later) -- all databases configured for duplicates will
+automatically be converted before the <code>Environment</code> or
+<code>ReplicatedEnvironment</code> constructor returns.  Note that a database
+might be explicitly configured for duplicates using
+<code>DatabaseConfig.setSortedDuplicates(true)</code>, or implicitly configured
+for duplicates by using a DPL MANY_TO_XXX relationship
+(<code>Relationship.MANY_TO_ONE</code> or
+<code>Relationship.MANY_TO_MANY</code>).
+<p>
+The duplicate database conversion only rewrites internal nodes in the Btree,
+not leaf nodes.  In a test with a 500 MB cache, conversion of a 10 million
+record data set (8 byte key and data) took between 1.5 and 6.5 minutes,
+depending on number of duplicates per key.  The high end of this range is when
+10 duplicates per key were used; the low end is with 1 million duplicates per
+key.
+<p>
+To make the duplicate database conversion predictable during deployment, users
+should measure the conversion time on a non-production system before upgrading
+a deployed system.  When duplicates are converted, the Btree internal nodes are
+preloaded into the JE cache.  A new configuration option,
+<code>EnvironmentConfig.ENV_DUP_CONVERT_PRELOAD_ALL</code>, can be set to false
+to optimize this process if the cache is not large enough to hold the internal
+nodes for all databases.  For more information, see the javadoc for this
+property.
+<p>
+If an application has no databases configured for duplicates, then the last
+step simply opens the JE environment normally, and no data conversion is
+performed.
+<p>
+If the user fails to run the DbPreUpgrade_4_1 or DbRepPreUpgrade_4_1 utility
+program before opening an environment with JE 5 for the first time, an
+exception such as the following will normally be thrown by the
+<code>Environment</code> or <code>ReplicatedEnvironment</code> constructor:
+<pre>
+  com.sleepycat.je.EnvironmentFailureException: (JE 5.0.46) JE 4.1 duplicate DB
+  entries were found in the recovery interval. Before upgrading to JE 5.0, the
+  following utility must be run using JE 4.1 (4.1.20 or later):
+  DbPreUpgrade_4_1.  See the change log.
+  UNEXPECTED_STATE: Unexpected internal state, may have side effects.
+    at com.sleepycat.je.EnvironmentFailureException.unexpectedState(EnvironmentFailureException.java:376)
+    at com.sleepycat.je.recovery.RecoveryManager.checkLogVersion8UpgradeViolations(RecoveryManager.java:2694)
+    at com.sleepycat.je.recovery.RecoveryManager.buildTree(RecoveryManager.java:549)
+    at com.sleepycat.je.recovery.RecoveryManager.recover(RecoveryManager.java:198)
+    at com.sleepycat.je.dbi.EnvironmentImpl.finishInit(EnvironmentImpl.java:610)
+    ...  </pre>
+<p>
+If the user fails to run the DbPreUpgrade_4_1 or DbRepPreUpgrade_4_1 utility
+program, but no exception is thrown when the environment is opened with JE 5,
+this is probably because the application performed an
+<code>Environment.sync</code> before last closing the environment with JE 4.1
+or earlier, and nothing else happened to be written (by the application or JE
+background threads) after the sync operation.  In this case, running the
+upgrade utility is not necessary.
+
+<!-- =================================================== -->
+<hr>
+<h3 align="center"><u>Changes in 5.0.103</u></h3>
+<!-- ================================================= --> 
+<ol>
+
+<!--
+Use this format for changes and include JE version at the time of the change.
+Add entries in order of JE version (chronological order) within this section.
+Note the blank line between changes.
+
+<li>
+DESCRIPTION
+[#SR] (5.0.XX)
+</li><br>
+
+<li>
+...
+</li><br>
+ -->
+
+<li>
+Fix cast exception when calling EnvironmentStat.getAvgBatchManual() method.
+[#23060] (5.0.99)
+</li><br>
+
+<li>
+Fixed a bug that could cause an IndexOutOfBoundsException when logging the
+Environment statistics by the StatLogger. 
+[#22885] (5.0.98)
+</li><br>
+
+<li>
+Fixed a bug that could cause an EnvironmentFailureException with the message
+"DB not found during non-recovery undo/rollback", when a transaction is
+invalidated in one thread and concurrently used in another thread to perform
+a write operation.  This could only occur with using a transactional,
+non-replicated database, in a replicated environment.
+[#22875] (5.0.98)
+</li><br>
+
+<li>
+Fixed a bug that could cause the following exception, when an Error is thrown
+and caught concurrently by two threads performing JE operations.
+<pre>
+ Caused by: java.lang.IllegalStateException: Can't overwrite cause
+    at java.lang.Throwable.initCause(Throwable.java:320)
+    at com.sleepycat.je.dbi.EnvironmentImpl.invalidate(EnvironmentImpl.java:1529)
+    ...
+</pre>
+[#22837] (5.0.98)
+</li><br>
+
+<li>
+Fixed a bug that sometimes resulted in an uncommitted record deletion performed
+in one transaction to be visible (result in a NOTFOUND result) to an operation
+performed in another transaction.
+[#22892] (5.0.98)
+</li><br>
+
+<li>
+Added a new statistic for cheaply checking the current utilization of the log,
+without having to run the DbSpace utility:
+EnvironmentStats.getLastKnownUtilization.  See the javadoc for details.
+[#22911] (5.0.98)
+</li><br>
+
+<li>
+Added a column named time that contains the time the data was logged to 
+the je.config.csv environment statistics file.
+[#22919] (5.0.98)
+</li><br>
+
+<li>
+Fixed a bug that caused immutable Environment configuration properties to not
+have the correct value in the je.config.csv file.
+[#22923] (5.0.98)
+</li><br>
+
+<li>
+Improved performance when "no sync" durability is used, by performing writes
+of the buffer outside of the global write lock.  This also prevents writing
+multiple buffers in a single thread, which could cause performance issues on
+some systems.  [#22988] (5.0.100)
+</li><br>
+
+<li>
+Fixed a bug that prevented exclusive lock-out of application threads during a
+preload (via Database.preload or Environment.preload).  If applications threads
+were able to write during the preload, this could cause corruption.
+[#23017] (5.0.101)
+</li><br>
+
+<li>
+The JE cleaner now wakes up whenever a database is removed or truncated.  This
+ensures that disk space is reclaimed as soon as possible, even when there is
+little or no write activity.
+[#22915] (5.0.101)
+</li><br>
+
+<li>
+CacheMode.EVICT_LN now leaves the parent INs hot after an operation, rather
+than forcing them to be cold.  This allows using EVICT_LN to avoid Java GC
+problems, while still using an LRU for eviction.
+[#23066] (5.0.101)
+</li><br>
+
+<li>
+Fix DbFilterStat utility to work with the je.config.csv file. Also added
+envcfg: to the EnvironmentConfig column names in the je.config.csv file.
+[#22996] (5.0.102)
+</li><br>
+
+<li>
+Fix a bug where a NullPointerException was thrown by Database.openCursor when
+called after closing an invalid Environment.
+[#23083] (5.0.102)
+</li><br>
+
+</ol>
+
+<!-- =================================================== -->
+<hr>
+<h3 align="center"><u>Changes in 5.0.97</u></h3>
+<!-- ================================================= -->
+<ol>
+
+<li>
+Fixed a bug that causes excessive logging when an environment directory is
+forcibly removed while the environment is open, during a unit test for example.
+[#22625] (5.0.85)
+</li><br>
+
+<li>
+The internal JE thread for capturing statistics is no longer created when the
+EnvironmentConfig.STATS_COLLECT config param is false.
+[#22659] (5.0.85)
+</li><br>
+
+<li>
+In an HA application, the probability of hard rollbacks during a master
+transfer operation has been reduced.
+[#22658] (5.0.85)
+</li><br>
+
+<li>
+Updated the logging and stats file formats to print times in UTC
+timezone and in a consistent format that includes the full year.  The
+new format is "2013-07-31 13:47:27.753 UTC".  [#22670] (5.0.85)
+</li><br>
+
+<li>
+Add -outputproperties switch to DbCacheSize.  This causes the calculated sizes
+to be written to System.out in Java properties format.  See the DbCacheSize
+usage command in the javadoc for details.
+[#22719] (5.0.86)
+</li><br>
+
+<li>
+Shutdown HA feeder threads and the replica thread promptly as a result of an
+EnvironmentFailureException instead of waiting for the environment handle to be
+closed. The change makes for faster, more robust failover and reduces dependence
+on application behavior.  [#22637] (5.0.86)
+</li><br>
+
+<li>
+Eliminates duplicate log messages associated with an
+InsufficientLogException. The message was logged twice: the first time as a
+WARNING and again as SEVERE. With this change, the message is logged just once,
+as a WARNING.  
+[#22789] (5.0.87)
+</li><br>
+
+<li>
+Added the EnvironmentConfig.CLEANER_ADJUST_UTILIZATION boolean configuration
+parameter, to allow disabling of undesired automatic adjustments to log
+utilization.  By default, adjustments are enabled, and the default behavior has
+not changed.  For more information, see the javadoc for this parameter.
+[#22768] (5.0.88)
+</li><br>
+
+<li>
+A performance enhancement was made to improve multi-threaded write performance.
+The checksum computation was moved out of the critical section during which a
+global mutex is held.  This, together with earlier improvements to the write
+path, improve write performance overall for multi-threaded applications.
+However, the performance improvements are limited to standalone JE
+applications; performance is not improved for HA applications.
+[#16925] (5.0.97)
+</li><br>
+
+<li>
+Fixed a bug that could cause the following exception when an error occurs while
+reading from the log, and a CRUD operation is in progress.  The error while
+reading invalidates the Environment and no further operations are possible, but
+the incorrect exception may be misleading.
+<pre>
+com.sleepycat.je.EnvironmentFailureException: (JE 5.0.86) Latch not held:
+IN1419 UNEXPECTED_STATE: Unexpected internal state, may have side effects.
+    at com.sleepycat.je.EnvironmentFailureException.unexpectedState(EnvironmentFailureException.java:390)
+    at com.sleepycat.je.latch.SharedLatch.release(SharedLatch.java:181)
+    at com.sleepycat.je.tree.IN.releaseLatch(IN.java:551)
+    at com.sleepycat.je.tree.Tree.getNextIN(Tree.java:1120)
+    at com.sleepycat.je.tree.Tree.getNextBin(Tree.java:935)
+    at com.sleepycat.je.dbi.CursorImpl.getNext(CursorImpl.java:1666)
+    ...
+</pre>
+[#22772] (5.0.97)
+</li><br>
+
+<li>
+Fixed a bug that in rare conditions could cause a SecondaryIntegrityException
+such as the following.  This could occur when a given key is being inserted
+and deleted concurrently in two different threads, and another thread is
+reading the record using read-uncommitted isolation.  This bug is present is
+all earlier versions of JE 5 and JE 4.x.
+<pre>
+Caused by: com.sleepycat.je.SecondaryIntegrityException: (JE 5.0.83) Secondary
+refers to a missing key in the primary database
+    at com.sleepycat.je.Database.secondaryRefersToMissingPrimaryKey(Database.java:2252)
+    at com.sleepycat.je.Cursor.readPrimaryAfterGet(Cursor.java:3882)
+    at com.sleepycat.je.SecondaryCursor.readPrimaryAfterGet(SecondaryCursor.java:1519)
+    at com.sleepycat.je.SecondaryCursor.retrieveNext(SecondaryCursor.java:1495)
+    at com.sleepycat.je.SecondaryCursor.getNext(SecondaryCursor.java:601)
+    ...
+</pre>
+[#22603] (5.0.97)
+</li><br>
+
+<li>
+JE now logs a SEVERE message as follows in the je.info file at startup when
+-XX:+UseCompressedOops is specified but the heap size is larger than the
+maximum required value on the JVM platform for using this option.  For example,
+on the Oracle JVM, -Xmx29g or smaller must be specified to use this option.  On
+non-Oracle JVM platforms (more specifically those JVM platforms not including
+the com.sun.management.HotSpotDiagnosticMXBean class), JE does not currently
+detect this situation and does not log a message.
+<pre>
+2013-08-29 19:41:45.965 UTC SEVERE [.] -XX:+UseCompressedOops was specified but
+is not in effect, probably because the heap size is too large for this JVM
+option on this platform.  This is likely to cause an OutOfMemoryError!
+</pre>
+Note that in this situation, and presumably on all JVMs, the JVM itself also
+outputs a warning message at startup such as the following:
+<pre>
+OpenJDK 64-Bit Server VM warning: Max heap size too large for Compressed Oops
+</pre>
+[#22657] (5.0.97)
+</li><br>
+
+<li>
+Fixed problems related to log cleaning and the estimation of log utilization.
+Previously, in one reported case log utilization was adjusted incorrectly (see
+EnvironmentConfig.CLEANER_ADJUST_UTILIZATION), resulting in very small values
+for the LNSizeCorrectionFactor (EnvironmentStats.getLNSizeCorrectionFactor()).
+In addition, repeated probing of the same log file was observed.  Both of these
+problems have been fixed.  Thanks to Vinoth for
+<a href="https://forums.oracle.com/message/11174300">reporting</a> this on OTN
+and working with us to find the problem.
+[#22814] (5.0.97)
+</li><br>
+
+<li>
+Change Learner Agent to only respond to a query for a master when it's in the
+Master or Replica state, to ensure that the master information is current.
+Prior to this change, obsolete information could prevent the replication group
+from recovering on it's own and electing a new master in some rare
+circumstances. [#22815] (5.0.97)
+</li><br>
+
+<li>
+Avoid throwing an InsufficientLogException when a Replication Node that has
+been inactive for a period exceeding ReplicationConfig.REP_STREAM_TIMEOUT, but
+is otherwise reasonably current, rejoins the group. Such Replication Nodes can
+now rejoin the group without going through a Network Restore operation.
+[#22782] (5.0.97)
+</li><br>
+
+<li>
+Fixed a bug that could result in a stack trace like the one below: 
+<pre>
+Caused by: java.lang.IllegalArgumentException: toKey out of range
+    at java.util.TreeMap$AscendingSubMap.headMap(TreeMap.java:1719)
+    at java.util.TreeSet.headSet(TreeSet.java:338)
+    at java.util.TreeSet.headSet(TreeSet.java:372)
+    at com.sleepycat.je.cleaner.Cleaner.deleteSafeToDeleteFiles(Cleaner.java:739)
+    at com.sleepycat.je.cleaner.Cleaner.updateFilesAtCheckpointEnd(Cleaner.java:935)
+    at com.sleepycat.je.recovery.Checkpointer.doCheckpoint(Checkpointer.java:797)
+    at com.sleepycat.je.recovery.Checkpointer.onWakeup(Checkpointer.java:508)
+    at com.sleepycat.je.utilint.DaemonThread.run(DaemonThread.java:148)
+</pre>
+
+This problem could occur in rare circumstances when using the DbBackUp or
+DiskOrderedCursor APIs. [#22822] (5.0.97)
+</li><br>
+
+<li>
+Added EnvironmentConfig.ENV_RECOVERY_FORCE_NEW_FILE, which is to be used after
+performing a restore from backup to force creation of a new log file prior to
+recovery.  For more information, see the javadoc for this parameter and the
+"Restoring from a backup" section in the DbBackup javadoc.  [#22834] (5.0.97)
+</li><br>
+
+</ol>
+
+<!-- =================================================== -->
+<hr>
+<h3 align="center"><u>Changes in 5.0.84</u></h3>
+<!-- ================================================= -->
+<ol>
+
+<li>
+Made it possible to run a JE HA application on a fully disconnected node,
+with no available network interface. Previously, doing so resulted in this
+exception: 
+<blockquote>java.net.InetAddress.getLocalHost() returned loopback address:
+&lt;hostname&gt; and no suitable address associated with network
+interfaces.
+</blockquote>
+This could only realistically happen when developing, testing, or
+demo-ing a JE HA application, but was still an inconvenience. [#22252] (5.0.74)
+</li><br>
+
+<li>
+Fixed a memory leak caused by calling Environment.cleanLog.  If the Environment
+is open for a long period of time, the memory leak eventually causes an
+OutOfMemoryError.  The problem does not occur when using the default background
+cleaning threads -- it only occurs when the application calls the cleanLog
+method explicitly. [#22254] (5.0.75)
+</li><br>
+
+<li>
+Added a feature that enables the ability to configure the system so
+performance statistics are automatically captured and easily imported
+to analyze via spreadsheet software. Statistics are tracked and logged
+for an Environment that is open in R/W mode. The statistics are logged
+in CSV format and written to the log file at a user specified interval.
+By default, statistics are written to a filed named je.stat.csv in the
+Environment directory. Configuration parameters control the size and
+number of rotating log files used (similar to java logging see
+java.util.logging.FileHandler). For a rotating set of files, as each
+file reaches a given size limit, it is closed, rotated out, and a new
+file opened. The name of the log file is je.stat.csv. Successively older
+files are named by adding "0", "1", "2", etc into the file name. The
+format is je.stat.[version number].csv. 
+<p>
+Application-supplied statistics may also be added to the JE statistics file
+so they may be easily correlated with JE statistics.
+<p>
+See the following new APIs related to the above new features:
+<ul>
+    <li>EnvironmentConfig.STATS_COLLECT</li>
+    <li>EnvironmentConfig.STATS_MAX_FILES</li>
+    <li>EnvironmentConfig.STATS_FILE_ROW_COUNT</li>
+    <li>EnvironmentConfig.STATS_COLLECT_INTERVAL</li>
+    <li>EnvironmentConfig.STATS_FILE_DIRECTORY</li>
+    <li>EnvironmentConfig.setCustomStats</li>
+</ul>
+<p>
+Added a feature that enables the ability to log information about the
+Environment configuration. The Environment configuration log file may be
+updated at Environment creation/open time or if the Environment configuration
+is altered. The name of the file is je.config.csv. The file resides in the
+same directory as the je.stats.csv file. This file will contain a maximum of
+1000 rows before it is rolled over. Only one version of the file is retained.
+The name of the previous version is je.config.1.csv. 
+<p>
+Fixed a problem that corrects the value for the avgBatch statistic. The number
+of batches was being cleared unconditionally when the statistic was acquired.
+It is now cleared only if StatConfig.setClear() is true.
+<p>
+Fixed a problem that corrects the value of the nRootSplits statistic. The value
+of the statistic was never cleared. It is now cleared if StatConfig.setClear()
+is true.
+<p>
+Added the com.sleepycat.je.util.DbFilterStats utility. The utility allows the
+ability to specify columns of the statistics file to project.
+[#22009] (5.0.76)
+</li><br>
+
+<li>
+Modified the JE HA network restore utility to verify log record
+checksums when it reads log files in the process of sending out their
+contents. A checksum failure results in an exception that is caught by
+the <code>NetworkRestore.execute</code> method, causing it to skip that
+log provider and try the next one. This change prevents the network
+restore operation from spreading log file corruption to other
+nodes.
+<p>
+As part of this change, also added the
+<code>LogVerificationReadableByteChannel</code> utility class for
+verifying log file checksums when copying log files using NIO channels,
+to provide better copying performance.
+<p>
+[#21029] (5.0.76)
+</li><br>
+
+<li>
+Removed a source of thread contention that was noticed while profiling an
+everything-in-memory, CPU-intensive application.  The internal methods causing
+the contention were: Environment.addReferringHandle and removeReferringHandle.
+[#22371] (5.0.76)
+</li><br>
+
+<li>
+Fixed a bug that caused database removal, truncation, or renaming to loop
+forever, following a ReplicaWriteException and an election.  The bug only
+applies to HA (replicated) environments when the following sequence occurs:
+<ol>
+    <li>A replica calls Environment.removeDatabase, truncateDatabase or
+    renameDatabase, causing a ReplicaWriteException.</li>
+    <li>This replica is elected master.</li>
+    <li>This new master (former replica) again calls
+    Environment.removeDatabase, truncateDatabase or renameDatabase. This method
+    loops forever.</li>
+</ol>
+This bug does not occur if the ReplicatedEnvironment is closed, normally or
+abnormally, in between any two of these steps.
+<p>
+[#22394] (5.0.76)
+</li><br>
+
+<li>
+Added support for non-replicated Databases and EntityStores in a replicated
+(HA) environment.  Non-replicated databases are intended to be used primarily
+for persistent caching and other non-critical local storage.  For more
+information, see the "Non-replicated Databases in a Replicated Environment"
+section of the ReplicatedEnvironment javadoc.
+[#20543] (5.0.76)
+</li><br>
+
+<li>
+Fixed a bug that prevents opening the Environment with a stack trace such as
+the following:
+<pre>
+Caused by: com.sleepycat.je.EnvironmentFailureException: ...
+last LSN=0x21f/0x26 LOG_INTEGRITY: Log information is incorrect, problem is
+likely persistent. Environment is invalid and must be closed.
+at com.sleepycat.je.recovery.RecoveryManager.traceAndThrowException(RecoveryManager.java:3090)
+at com.sleepycat.je.recovery.RecoveryManager.undoLNs(RecoveryManager.java:1141)
+at com.sleepycat.je.recovery.RecoveryManager.buildTree(RecoveryManager.java:479)
+at com.sleepycat.je.recovery.RecoveryManager.recover(RecoveryManager.java:174)
+at com.sleepycat.je.dbi.EnvironmentImpl.finishInit(EnvironmentImpl.java:549)
+at com.sleepycat.je.dbi.DbEnvPool.getEnvironment(DbEnvPool.java:237)
+at com.sleepycat.je.Environment.makeEnvironmentImpl(Environment.java:229)
+at com.sleepycat.je.Environment.<init>(Environment.java:211)
+at com.sleepycat.je.Environment.<init>(Environment.java:165)
+...
+Caused by: com.sleepycat.je.EnvironmentFailureException: ...
+Cannot read backward over cleaned file from 543 to 539 LOG_INTEGRITY: Log information is incorrect, problem is likely persistent. Environment is invalid and must be closed.
+at com.sleepycat.je.log.FileReader.setBackwardPosition(FileReader.java:537)
+at com.sleepycat.je.log.FileReader.getLogEntryInReadBuffer(FileReader.java:429)
+at com.sleepycat.je.log.FileReader.readNextEntryAllowExceptions(FileReader.java:256)
+at com.sleepycat.je.log.FileReader.readNextEntry(FileReader.java:229)
+at com.sleepycat.je.recovery.RecoveryManager.undoLNs(RecoveryManager.java:1053)
+...
+</pre>
+This problem is very unlikely to occur -- the bug has always been present in JE
+but was recently reported for the first time.  It may be more likely to occur
+for applications that have long transactions.  If the problem does occur using
+an earlier version of JE, upgrading to JE 4.1.29 or later will allow the
+Environment to be opened and no data loss will occur.
+[#22407] (5.0.76)
+</li><br>
+
+<li>
+Replicas now group transaction commits that request replica durability:
+<code>SyncPolicy.SYNC</code>, when the transactions are replayed at the
+replica. These changes can provide significant throughput increase and latency
+reductions for high throughput applications that
+require <code>SyncPolicy.SYNC</code> durability.
+<p>This group commit behavior can be controlled by two new replication
+configuration parameters:
+<code>com.sleepycat.je.rep.ReplicationConfig.REPLICA_MAX_GROUP_COMMIT</code> and 
+<code>com.sleepycat.je.rep.ReplicationConfig.REPLICA_GROUP_COMMIT_INTERVAL</code>. 
+The following new methods defined on the
+class <code>com.sleepycat.je.rep.ReplicatedEnvironmentStats</code> provide
+information that can help tune the replica group commit configuration parameters:
+<ol>
+<li><code>getNReplayGroupCommitTimeouts()</code></li>
+<li><code>getNReplayGroupCommitMaxExceeded()</code></li>
+<li><code>getNReplayGroupCommitTxns()</code></li>
+<li><code>getNReplayGroupCommits()</code></li>
+</ol>
+<p>
+Please consult the javadoc for these methods and configuration parameters for
+additional details. [#22347] (5.0.77)
+</li><br>
+
+<li>
+Fixed a NullPointerException in BinaryProtocol.SimpleMessage that
+could occur in a JE replication node, that would manifest as the
+following stack trace. 
+<pre>
+Exception in thread "pool-1-thread-1" java.lang.NullPointerException
+at com.sleepycat.je.rep.utilint.BinaryProtocol$SimpleMessage.getMessageSize(BinaryProtocol.java:757)
+at com.sleepycat.je.rep.utilint.BinaryProtocol$SimpleMessage.wireFormat(BinaryProtocol.java:662)
+at com.sleepycat.je.rep.utilint.BinaryProtocol$RejectMessage.wireFormat(BinaryProtocol.java:864)
+at com.sleepycat.je.rep.utilint.BinaryProtocol.write(BinaryProtocol.java:544)
+at com.sleepycat.je.rep.utilint.BinaryProtocol.write(BinaryProtocol.java:532)
+at com.sleepycat.je.rep.impl.BinaryNodeStateService$NodeStateServiceRunnable.run(BinaryNodeStateService.java:127
+...
+</pre>
+The problem was due to faulty exception handling, and theoretically
+could manifest at any time during the life of a JE replication node,
+although it seems most likely to happen in reaction to network induced
+IOExceptions. The replication node would be invalidated, and would
+need to be re-opened by the application. The problem is transient, and
+does not affect the data stored persistently.
+<p>
+Thanks to Keith Wall for
+<a
+	  href="https://forums.oracle.com/forums/thread.jspa?threadID=2542064&tstart=0">reporting</a> this on OTN. [#22525] (5.0.77)
+</li><br>
+
+<li>
+Added feature that may increase write performance and decrease disk 
+utilization. Transactions may be grouped to amortize the cost of 
+write and/or fsync when a transaction commits with SyncPolicy.SYNC
+or SyncPolicy.WRITE_NO_SYNC for local transactions.
+<p>
+This group commit behavior can be controlled by two new environment
+configuration parameters:
+<code>com.sleepycat.je.EnvironmentConfig.LOG_GROUP_COMMIT_INTERVAL</code> and 
+<code>com.sleepycat.je.EnvironmentConfig.LOG_GROUP_COMMIT_THRESHOLD</code>. 
+<p>
+Please consult the javadoc for for additonal detail regarding these
+configuration parameters. [#22535] (5.0.78)
+</li><br>
+
+<li>
+Fixed a bug where no exception was thrown when a primary database was closed
+before closing its associated secondary databases.  Now, IllegalStateException
+is thrown by Database.close, after completing the closing of the database.
+[#22447] (5.0.78)
+</li><br>
+
+<li>
+Fixed a bug where an exception such as the following was thrown when running
+DbDump with the -r or -R option.
+<pre>
+java.lang.IndexOutOfBoundsException: -2363 is negative.
+at com.sleepycat.je.utilint.BitMap.set(BitMap.java:50)
+at com.sleepycat.je.util.DbScavenger.checkProcessEntry(DbScavenger.java:249)
+at com.sleepycat.je.util.DbScavenger.processDbTreeEntry(DbScavenger.java:296)
+at com.sleepycat.je.util.DbScavenger.access$000(DbScavenger.java:60)
+at com.sleepycat.je.util.DbScavenger$1.processEntryCallback(DbScavenger.java:196)
+at com.sleepycat.je.log.ScavengerFileReader.processEntry(ScavengerFileReader.java:96)
+at com.sleepycat.je.log.FileReader.readNextEntryAllowExceptions(FileReader.java:340)
+at com.sleepycat.je.log.ScavengerFileReader.readNextEntry(ScavengerFileReader.java:117)
+at com.sleepycat.je.util.DbScavenger.scavengeDbTree(DbScavenger.java:208)
+at com.sleepycat.je.util.DbScavenger.dump(DbScavenger.java:163)
+at com.sleepycat.je.util.DbDump.main(DbDump.java:203)
+</pre>
+[#20385] (5.0.78)
+</li><br>
+
+<li>
+Fixed a bug where DiskOrderedCursor.getNext would return NOTFOUND after its
+thread was interrupted, rather than throwing ThreadInterruptedException.  Now,
+ThreadInterruptedException is thrown according to the current JE interrupt
+handling policy.  [#22548] (5.0.79)
+</li><br>
+
+<li>
+Fixed a bug where in very rare cases, a log corruption could be caused if an IO
+error occurs concurrently with the final flush performed by a checkpoint, or by
+a call to Environment.sync or Environment.flushLog.  [#22561] (5.0.80)
+</li><br>
+
+<li>
+Fixed a bug that causes a NullPointerException when Database.compareKeys or
+compareDuplicates is called, and the database has been closed.  Now, an
+IllegalStateException is thrown instead. [#22572] (5.0.82)
+</li><br>
+
+<li>
+Fixed a bug causing the log cleaner statistic
+EnvironmentStats.getLNSizeCorrectionFactor to be output via the
+EnvironmentStats.toString method and in the je.stats.cvs file with the wrong
+name.  The name output was correctedAvgLNSize, which is the name of a
+stat that was deprecated in JE 5.0.56, and the corrected name is
+lnSizeCorrectionFactor.  [#20782] (5.0.83)
+</li><br>
+
+</ol>
+
+<!-- =================================================== -->
+<hr>
+<h3 align="center"><u>Changes in 5.0.73</u></h3>
+<!-- ================================================= -->
+<ol>
+
+<li>
+Fixed a bug that caused data corruption (for example, resulting in an
+EnvironmentFailureException with a LOG_FILE_NOT_FOUND message) under certain
+circumstances, when many Databases are created and not all Databases are kept
+open.  In fact two bugs were fixed that contributed to the problem.  The first
+bug was a memory size calculation error and caused heavy/costly cache eviction,
+even when the cache would normally be large enough to avoid such eviction.
+This calculation error occurred during log cleaning, and only when closed
+databases had been previously evicted from the cache. The second bug caused
+Btree corruption when cache eviction was heavy and many closed databases were
+evicted.  [#21686] (JE 5.0.61)
+</li><br>
+
+<li>
+Fixed a bug that prevented CacheMode.EVICT_LN from operating correctly in a
+long running Environment where log cleaning is active.  As log cleaning
+migrated records (specifically LNs), the memory used by Btree internal nodes
+(specifically BINs) increased.  The symptom is that the number of BINs in the
+"no target" category (EnvironmentStats.getNNoTarget) is reduced over time, and
+the number of BINs in other categories (getNINSparseTarget) increases.  In some
+applications this would cause unnecessary eviction and IO, and therefore
+decreased performance. [#21734] (JE 5.0.64)
+</li><br>
+
+<li>
+A JE/HA application may now explicitly transfer the master role, on
+demand, from the current master to one of a specified set of currently
+active replica nodes in the replication group.  The
+<code>transferMaster()</code> methods in the
+<code>ReplicatedEnvironment</code> class are provided for this
+purpose.  [#18081] (JE 5.0.64)
+</li><br>
+
+<li>
+It is now possible to restore an entire replication group by
+restoring just one node from a backup.  The other nodes in the
+group perform a Network Restore from this one node, if that initial
+node is included in the list of "helper hosts" configured by the
+other nodes.  [#20701] (JE 5.0.64)
+</li><br>
+
+<li>
+Fixed a bug which could lead to problems if the replication group
+master failed to receive transaction acknowledgements from a
+majority of existing replicas when making changes to the
+composition of the group (for example, adding new nodes, or moving
+an existing node to a new network address).  
+<p>
+In one case, the master would become unable to accept any future group
+changes, even after all existing replicas were successfully connected
+and providing acknowledgements again.  In another case the normal
+protections against duplicate masters could become compromised, making
+it possible (although unlikely) for transactions apparently "durably
+replicated" to a group majority to nevertheless disappear after a
+network partition were repaired.  [#21095] (JE 5.0.64)
+</li><br>
+
+<li>
+Improved validity checking for replication group name and node
+names.  Both of these types of names should consist of letters,
+digits, and hyphen, underscore, or period.  [#21407] (JE 5.0.64)
+</li><br>
+
+<li>
+Fixed a bug where specifying a very short ENV_UNKNOWN_STATE_TIMEOUT
+could lead to an UnknownMasterException from the ReplicatedEnvironment
+constructor.  [#21427] (JE 5.0.64)
+</li><br>
+
+<li>
+Fixed a DiskOrderedCursor bug where latch deadlocks would occur when the
+consumer thread (the application thread calling DiskOrderedCursor.getNext) also
+accessed the database being scanned using other APIs, e.g., Database or Cursor
+methods.  To allow a DiskOrderedCursor to operate concurrently with other
+operations on the same database in the consumer thread, the internal algorithm
+for a disk ordered scan has been changed.  See the new Consistency Guarantees
+and Performance Considerations sections in the DiskOrderedCursor javadoc.  Also
+as part of this fix, the following methods in DiskOrderedCursorConfig have been
+deprecated: getMaxSeedMillisecs, setMaxSeedMillisecs, getMaxSeedNodes and
+setMaxSeedNodes.  These config properties no longer have any effect.
+<p>
+Also fixed a bug that caused a null key to be returned by
+DiskOrderedCursor.getNext.  The bug occurred infrequently as the result of
+concurrent log cleaning activity.  When it occurred, calling
+DatabaseEntry.getData for the key parameter would return null, even though
+DiskOrderedCursor.getNext returned OperationStatus.SUCCESS.
+<p>
+Thanks to Vinoth Chandar for
+<a href="https://forums.oracle.com/forums/message.jspa?messageID=10509778#10509778">reporting</a>
+this on OTN, and helping us to diagnose the problem and test the fix. 
+<p>
+[#21667] (JE 5.0.65)
+</li><br>
+
+<li>
+Fixed a DPL class evolution bug that could result in an assertion with a stack
+trace similar to the following, when attempting to open an EntityStore.
+<pre>
+java.lang.AssertionError: &lt;ComplexType id="0" ...  &lt;/ComplexType&gt;
+    at com.sleepycat.persist.impl.Evolver.evolveFormatInternal(Evolver.java:358)
+    at com.sleepycat.persist.impl.Evolver.evolveFormat(Evolver.java:247)
+    at com.sleepycat.persist.impl.ComplexFormat.evolveFieldList(ComplexFormat.java:1634)
+    at com.sleepycat.persist.impl.ComplexFormat.evolveAllFields(ComplexFormat.java:1376)
+    at com.sleepycat.persist.impl.ComplexFormat.evolve(ComplexFormat.java:1127) 
+    ...
+</pre>
+[#21869] (JE 5.0.66)
+</li><br>
+
+<p>
+The log cleaner now outputs "No file selected for cleaning" log messages at
+level FINE rather than at level INFO.  (JE 5.0.66)
+</li><br>
+
+<li>
+Added safeguards to prevent log corruption when an Error (e.g.,
+OutOfMemoryError) is thrown by a RandomAccessFile method during a write
+operation.  Normally RandomAccessFile methods throw IOExceptions, but on
+certain platforms they may throw Errors.  Without the added safeguards, data
+corruption could occur when an Error is thrown by RandomAccessFile methods.
+Several changes were made along with this fix to support stress testing of IO
+errors.
+<ul>
+    <li>
+    When an exception is thrown by a RandomAccessFile method the file lock on
+    the je.lck file is released to allow tests to re-open the Environment.
+    <li>
+    The DbVerifyLog utility and LogVerificationInputStream class now ignore an
+    incomplete entry at the end of the last log file in the Environment, since
+    such an entry is ignored by recovery when the Environment is opened.  This
+    allows IO failure stress tests to use these classes to check the log
+    correctly for errors that would prevent recovery.  This behavior is also
+    correct for the purpose of verifying log files during a backup.
+    <li>
+    The DbVerifyLog utility and LogVerificationInputStream class have been
+    enhanced to verify correctness of the previous offset in the internal log
+    entry header.  An incorrect previous offset value is sometimes a symptom of
+    log corruption.
+    <li>
+    The internal JE background threads (cleaner, checkpointer and compressor)
+    now use the java.util.logging package to output exceptions and status
+    information instead of writing directly to System.err.
+</ul>
+[#21929] (JE 5.0.68)
+</li><br>
+
+<li>
+Removed an overzealous assertion that could fire during periods of heavy
+eviction with a stack trace such as the following:
+<pre>
+java.lang.AssertionError
+ at com.sleepycat.je.tree.INTargetRep$Sparse.updateCacheStats(INTargetRep.java:296)
+ at com.sleepycat.je.tree.INArrayRep.updateCacheStats(INArrayRep.java:133)
+ at com.sleepycat.je.tree.INArrayRep.noteRepChange(INArrayRep.java:158)
+ at com.sleepycat.je.tree.INArrayRep.noteRepChange(INArrayRep.java:163)
+ at com.sleepycat.je.tree.INTargetRep$None.set(INTargetRep.java:331)
+ at com.sleepycat.je.tree.INTargetRep$None.set(INTargetRep.java:303)
+ at com.sleepycat.je.tree.IN.updateNode(IN.java:1498)
+ at com.sleepycat.je.tree.IN.fetchTarget(IN.java:1332) 
+</pre>
+This (like any assertion) would invalidate the Environment, but otherwise did
+not cause any persistent damage.
+[#21990] (5.0.70)
+</li><br> 
+
+<li>
+Added a new method that should be used for performing incremental backups:
+<code>DbBackup.getLogFilesInSnapshot</code>.  Calling this method rather than
+<code>File.list</code> is necessary to prevent the possibility that the log
+cleaner will delete files prior to the creation of the backup manifest for the
+current snapshot.  If <code>File.list</code> is called, as described previously
+in the <code>DbBackup</code> javadoc, the manifest may not contain the files
+necessary for a restore and this would invalidate the backup.  For more
+information, see the updated description and examples at the top of the
+<code>DbBackup</code> class javadoc.
+<p>
+The code examples in the <code>DbBackup</code> javadoc and the Getting Started
+Guide have also been updated to pass the <code>lastFileInPrevBackup</code>
+parameter to the <code>DbBackup</code> constructor rather than to the
+deprecated <code>getLogFilesInBackupSet</code> method.
+<p>
+[#22014] (5.0.70)
+</li><br> 
+
+<li>
+The JE log cleaner now logs a SEVERE level message when the average cleaner
+backlog increases over time.  A trailing average of the cleaner backlog is used
+to prevent spurious messages.  Some applications may wish to use SEVERE
+log messages, such as this one, to trigger alerts.  An example of the message
+text is below.
+<pre>
+121215 13:48:57:480 SEVERE [...] Average cleaner backlog has grown from 0.0 to
+6.4. If the cleaner continues to be unable to make progress, the JE cache size
+and/or number of cleaner threads are probably too small. If this is not
+corrected, eventually all available disk space will be used.
+</pre>
+For more information on setting the cache size appropriately to avoid such
+problems, see:
+<a href="http://www.oracle.com/technetwork/database/berkeleydb/je-faq-096044.html#WhyshouldtheJEcachebelargeenoughtoholdtheBtreeinternalnodes">Why should the JE cache be large enough to hold the Btree internal nodes?</a>
+<p>
+[#21111] (5.0.71)
+</li><br> 
+
+<li>
+Fixed a bug that could cause a NullPointerException, such as the one below,
+when a ReplicatedEnvironment is opened on an HA replica node.  The conditions
+that caused the bug are: 1) a replica has been restarted after an abnormal
+shutdown (ReplicatedEnvironment.close was not called), 2) a transaction
+involving database records was in progress at the time of the abnormal
+shutdown, 3) the database is then removed (Environment.removeDatabase), and
+finally 4) yet another abnormal shutdown occurs.  If this bug is encountered,
+it can be corrected by upgrading to the JE release containing this fix, and no
+data loss will occur.
+<pre>
+Exception in thread "main" com.sleepycat.je.EnvironmentFailureException: (JE
+5.0.XX) ...  last LSN=.../... LOG_INTEGRITY: Log information is incorrect,
+problem is likely persistent. Environment is invalid and must be closed.
+    at com.sleepycat.je.recovery.RecoveryManager.traceAndThrowException(RecoveryManager.java:2793)
+    at com.sleepycat.je.recovery.RecoveryManager.undoLNs(RecoveryManager.java:1097)
+    at com.sleepycat.je.recovery.RecoveryManager.buildTree(RecoveryManager.java:587)
+    at com.sleepycat.je.recovery.RecoveryManager.recover(RecoveryManager.java:198)
+    at com.sleepycat.je.dbi.EnvironmentImpl.finishInit(EnvironmentImpl.java:610)
+    at com.sleepycat.je.dbi.DbEnvPool.getEnvironment(DbEnvPool.java:208)
+    at com.sleepycat.je.Environment.makeEnvironmentImpl(Environment.java:246)
+    at com.sleepycat.je.Environment.<init>(Environment.java:227)
+    at com.sleepycat.je.Environment.<init>(Environment.java:170)
+    ...
+Caused by: java.lang.NullPointerException
+    at com.sleepycat.je.log.entry.LNLogEntry.postFetchInit(LNLogEntry.java:406)
+    at com.sleepycat.je.txn.TxnChain.<init>(TxnChain.java:133)
+    at com.sleepycat.je.txn.TxnChain.<init>(TxnChain.java:84)
+    at com.sleepycat.je.recovery.RollbackTracker$RollbackPeriod.getChain(RollbackTracker.java:1004)
+    at com.sleepycat.je.recovery.RollbackTracker$Scanner.rollback(RollbackTracker.java:477)
+    at com.sleepycat.je.recovery.RecoveryManager.undoLNs(RecoveryManager.java:1026)
+    ... 10 more
+</pre>
+[#22052] (5.0.71)
+</li><br> 
+
+<li>
+The log cleaner will now delete files in the latter portion of the log, even
+when the application is not performing any write operations.  Previously, in a
+ReplicatedEnvironment files were prohibited from being deleted in the portion
+of the log after the last application write.  When a log cleaner backlog was
+present (for example, when the cache had been configured too small, relative to
+the data set size and write rate), this could cause the cleaner to operate
+continuously without being able to delete files or make forward progress.
+<p>
+Note that this change only applies to replicated environments.  In
+non-replicated environments, deletion of log files has always been allowed (and
+is still allowed) in the portion of the log after the last application write.
+<p>
+[#21069] (5.0.71)
+</li><br> 
+
+<li>
+Compiling and running the JE unit tests ("ant test") now require that JUnit
+version 4.10 or higher is installed. [#18115] (5.0.72)
+</li><br> 
+
+<li>
+Added a new log cleaner statistic to help diagnose problems when record locks
+are held by the application and the locks prevent log file deletion after a log
+file has been cleaned: EnvironmentStats.getPendingLNQueueSize.
+[#22100] (5.0.72)
+</li><br> 
+
+<li>
+Fixed a bug that caused two EnvironmentStats -- getNCachedBINs and
+getNCachedUpperINs -- to be incorrect when calling Environment.removeDatabase
+or truncateDatabase.  When a database was removed/truncated, the number of
+BINs/INs belonging to that database were not subtracted from these two stats,
+even though they were evicted from the cache correctly.  So in an application
+where databases are removed/truncated, these two stats were larger than the
+actual number of BINs/INs in cache and would increase over time.
+<p>
+Also added a new cache statistic to help diagnose potential memory leaks:
+EnvironmentStats.getDataAdminBytes.
+<p>
+[#22100] (5.0.72)
+</li><br> 
+
+<li>
+Fixed a bug that caused a NullPointerException during log cleaning when a
+database is truncated or removed within a small processing window.  An example
+of the stack trace follows.
+<pre>
+Feb 11, 2013 3:32:13 PM com.sleepycat.je.utilint.DaemonThread run
+SEVERE: <DaemonThread name="Cleaner-4"/> caught exception, java.lang.NullPointerException Continuing
+java.lang.NullPointerException
+    at com.sleepycat.je.cleaner.FileProcessor.processLN(FileProcessor.java:808)
+    at com.sleepycat.je.cleaner.FileProcessor.processFile(FileProcessor.java:674)
+    at com.sleepycat.je.cleaner.FileProcessor.doClean(FileProcessor.java:289)
+    at com.sleepycat.je.cleaner.FileProcessor.onWakeup(FileProcessor.java:148)
+    at com.sleepycat.je.utilint.DaemonThread.run(DaemonThread.java:163)
+    at java.lang.Thread.run(Thread.java:679)
+</pre>
+[#22202] (5.0.73)
+</li><br> 
+
+<li>
+Fixed a bug that caused a NullPointerException when opening an Environment that
+was previously written with JE 4.1 or earlier, and databases were truncated or
+removed since the last full checkpoint.  An example of the stack trace follows.
+This should not occur if the DbPreUpgrade_4_1 or DbRepPreUpgrade_4_1 is run as
+described under Upgrade Procedure above.
+<pre>
+Exception in thread "main" java.lang.NullPointerException
+    at com.sleepycat.je.recovery.RecoveryManager.checkLogVersion8UpgradeViolations(RecoveryManager.java:2686)
+    at com.sleepycat.je.recovery.RecoveryManager.buildTree(RecoveryManager.java:549)
+    at com.sleepycat.je.recovery.RecoveryManager.recover(RecoveryManager.java:198)
+    at com.sleepycat.je.dbi.EnvironmentImpl.finishInit(EnvironmentImpl.java:610)
+    at com.sleepycat.je.dbi.DbEnvPool.getEnvironment(DbEnvPool.java:210)
+    at com.sleepycat.je.Environment.makeEnvironmentImpl(Environment.java:246)
+    at com.sleepycat.je.Environment.<init>(Environment.java:227)
+    at com.sleepycat.je.Environment.<init>(Environment.java:170)
+    ...
+</pre>
+[#22203] (5.0.73)
+</li><br> 
+
+<li>
+Two changes to DbSpace were made.  First, inaccuracies in the the -r
+(recalculation) option have been corrected; discrepancies with the actual
+utilization values were due to these inaccuracies.  Second, the -s and -e
+options, and corresponding setStartFile and setEndFile methods, have been
+added; these allow viewing and (optionally) recalculating a subset of the files
+in the log.  Note that the recalculation option is used primarily for analysis
+and debugging.
+[#22208] (5.0.73)
+</li><br> 
+
+<li>
+DbVerify has been improved to add Btree level information for internal
+databases, and internal database names may now be specified with the -s option.
+Note that DbVerify is used primarily for analysis and debugging.
+[#22209] (5.0.73)
+</li><br> 
+
+<li>
+Fixed a bug in EnvironmentConfig.setConfigParam where a boolean "true" property
+specified with leading or trailing whitespace was treated as if it were
+"false", and no exception was thrown.  The same bug impacted boolean properties
+specified in the je.properties file with trailing whitespace.
+<p>
+<b>WARNING:</b> This fix could change the behavior of JE if a boolean
+EnvironmentConfig property is specified as "true" but with leading or trailing
+whitespace.  Previously such a property would be set to false, and now it will
+be set to true.
+<p>
+[#22212] (5.0.73)
+</li><br> 
+
+</ol>
+
+<!-- =================================================== -->
+<hr>
+<h3 align="center"><u>Changes in 5.0.58</u></h3>
+<!-- =================================================== -->
+<ol>
+
+<li>
+The replay mechanism used in JE HA has been restructured to use multiple
+threads for increased concurrency. These changes result in a 20% increase in
+throughput in our performance tests. [#21396]
+</li><br>
+
+<li>
+Made several improvements and fixes to log cleaning.
+  <ul>
+  <li>
+  Made changes to reduce bursty cleaning behavior.  A burst of log cleaning
+  would occur when selecting a log file for cleaning that has a significantly
+  different average record size than the log files cleaned previously.  The
+  bursts impacted application performance.
+  </li>
+  <li>
+  EnvironmentStats.getCorrectedAvgLNSize and getEstimatedAvgLNSize are
+  deprecated and have been replaced by getLNSizeCorrectionFactor.
+  </li>
+  <li>
+  Added INFO level logging that is output during log cleaning and helps to
+  analyze cleaner behavior.
+  </li>
+  <li>
+  Fixed a problem that prevented the following EnvironmentStat values from
+  being cleared (set to zero) when StatsConfig.setClear(true) was used:
+  <code>getNBINDeltasObsolete, getNBINDeltasCleaned, getNBINDeltasDead,
+  getNBINDeltasMigrated</code>.
+  </li>
+  <li>
+  Fixed a stats problem that incorrectly counted migrated LNs as marked for
+  migration, even when lazy migration was disabled (which is the default
+  setting).  Migrated LNs were included in EnvironmentStats.getNLNsMarked and
+  they should have been included in EnvironmentStats.getNLNsMigrated.
+  </li>
+  <li>
+  Fixed a calculation error that prevented log cleaning probes (read-only
+  cleaner runs that detect under-cleaning scenarios) from being executed.  The
+  error occurred only when the log file size was very large, e.g., 1 GB.
+  </li>
+  </ul>
+[#21106]
+</li><br>
+
+<li>
+Fixed a bug that sets the transaction state incorrectly when
+InsufficientAcksException is thrown during Transaction.commit().  Due to this
+bug, the transaction state is set to Transaction.State.MUST_ABORT when this
+exception is thrown.  The incorrect state has two impacts:
+  <ul>
+  <li>
+  If Transaction.abort() is <em>not</em> called after InsufficientAcksException
+  is thrown, the impact is only that Transaction.getState() will report the
+  wrong value (MUST_ABORT).  The transaction is committed on the master and
+  will be committed on the replicas.
+  </li>
+  <li>
+  If Transaction.abort() <em>is</em> called after InsufficientAcksException is
+  thrown, the impact depends on whether Java assertions are enabled.  If
+  assertions are enabled, abort() fires an assertion resulting in a stack trace
+  such as the one below.  The transaction is committed on the master and will
+  be committed on the replicas.
+  <pre>
+    Caused by: java.lang.AssertionError
+    at com.sleepycat.je.txn.Txn.abortInternal(Txn.java:1127)
+    at com.sleepycat.je.txn.Txn.abort(Txn.java:1094)
+    at com.sleepycat.je.txn.Txn.abort(Txn.java:1067)
+    at com.sleepycat.je.Transaction.abort(Transaction.java:205)
+    ...
+  </pre>
+  If assertions are disabled and Transaction.abort() is called after
+  InsufficientAcksException is thrown, the abort() will succeed (at least
+  temporarily) on the master, but for a brief period (between the commit and
+  the abort) may appear to other threads as committed.  It will always be
+  committed on the replicas.  The abort() will be permanent on the master
+  unless an abnormal shutdown and recovery occur and the transaction is
+  replayed by recovery; in that case, the transaction will be committed on the
+  master and the replicas.
+  </li>
+  </ul>
+<p>
+To summarize, if Transaction.abort() is called after InsufficientAcksException
+is thrown and assertions are disabled, the transaction may be aborted on one
+node (the master at the time of the commit and abort), but committed on the
+other nodes (the replicas at the time).  Otherwise, the only impact is that the
+transaction state will be wrong (it will be MUST_ABORT); in this case the
+transaction will be committed on all nodes.
+<p>
+The likelihood of the bug occurring in production is low because the
+InsufficientAcksException only occurs when a replica becomes unavailable in a
+small window.  Normally, InsufficientReplicasException (which does not trigger
+this bug) is thrown when a replica is unavailable.
+<p>
+This bug was introduced in JE 5.0.48 and only applies to replicated
+environments.  With the fix, the transaction state is correctly set to
+COMMITTED and the transaction will be committed on all nodes.
+<p>
+A workaround for this bug (an alternative to upgrading JE) is to be sure not to
+call abort() after commit(), at least when InsufficientAcksException is thrown.
+Calling abort() after commit() fails can make exception handling simpler, but
+is never necessary.
+<p>
+[#21598]
+</li><br>
+
+</ol>
+
+<!-- =================================================== -->
+<hr>This 
+<h3 align="center"><u>Changes in 5.0.55</u></h3>
+<!-- =================================================== -->
+
+<ol>
+
+<li>
+Fixed a bug that could cause the contents of a database to be deleted after a
+crash, when the database was renamed just prior to the crash.  A database can
+be renamed explicitly with <code>Environment.renameDatabase</code>, or
+implicitly when a DPL <code>Renamer</code> mutation is used to rename an entity
+class or a secondary key field.  This bug was introduced in JE 5.0.48. [#21537]
+</li><br>
+
+<li>
+Fixed an inefficiency in the Checkpointer which manifests itself as
+a large amount of time being spent in
+<code>com.sleepycat.je.recovery.DirtyINMap.removeNextNode()</code> calling
+<code>java.util.HashMap$HashIterator.remove()</code> calling
+<code>java.util.HashMap.removeEntryForKey()</code>. [#21492]
+</li><br>
+
+<li>
+An enhancement has been made to <code>DbVerify</code> to show a histogram of
+BIN counts by utilization percentage.This is a sample of the output:
+<pre>
+Verifying database p10
+Checking tree for p10
+BTree: Composition of btree, types and counts of nodes.
+        binCount=3,207
+        binEntriesHistogram=[40-49%: 3,093; 50-59%: 10; 60-69%: 22; 70-79%: 26;
+80-89%: 21; 90-99%: 35]
+        binsByLevel=[level 1: count=3,207]
+        deletedLNCount=0
+        inCount=49
+        insByLevel=[level 2: count=48; level 3: count=1]
+        lnCount=209,716
+        mainTreeMaxDepth=3
+</pre>
+[#21106]
+</li><br>
+
+<li>
+Fixed a bug that caused an exception such as the following, when opening an
+Environment in read-only mode.  This occurred under certain circumstances when
+a clean shutdown (final checkpoint) was not performed when the Environment was
+last used by a read-write process.
+<pre>
+com.sleepycat.je.EnvironmentFailureException: (JE 5.0.34)
+ Cannot log LNs in read-only env. UNEXPECTED_STATE: Unexpected internal state, may have side effects.
+at com.sleepycat.je.EnvironmentFailureException.unexpectedState(EnvironmentFailureException.java:376)
+at com.sleepycat.je.tree.LN.logInternal(LN.java:450)
+at com.sleepycat.je.tree.LN.optionalLog(LN.java:350)
+at com.sleepycat.je.dbi.CursorImpl.putCurrentAlreadyLatchedAndLocked(CursorImpl.java:1236)
+at com.sleepycat.je.dbi.CursorImpl.putCurrent(CursorImpl.java:1132)
+at com.sleepycat.je.dbi.DbTree$RewriteMapLN.doWork(DbTree.java:744)
+at com.sleepycat.je.tree.Tree.withRootLatchedExclusive(Tree.java:386)
+at com.sleepycat.je.dbi.DbTree.modifyDbRoot(DbTree.java:713)
+at com.sleepycat.je.dbi.DbTree.modifyDbRoot(DbTree.java:646)
+at com.sleepycat.je.dbi.DbTree.optionalModifyDbRoot(DbTree.java:636)
+at com.sleepycat.je.tree.Tree.searchSplitsAllowed(Tree.java:1217)
+at com.sleepycat.je.tree.Tree.getParentBINForChildLN(Tree.java:817)
+at com.sleepycat.je.recovery.RecoveryManager.redo(RecoveryManager.java:1911)
+at com.sleepycat.je.recovery.RecoveryManager.redoOneLN(RecoveryManager.java:1502)
+at com.sleepycat.je.recovery.RecoveryManager.redoLNs(RecoveryManager.java:1302)
+at com.sleepycat.je.recovery.RecoveryManager.buildTree(RecoveryManager.java:586)
+at com.sleepycat.je.recovery.RecoveryManager.recover(RecoveryManager.java:188)
+at com.sleepycat.je.dbi.EnvironmentImpl.finishInit(EnvironmentImpl.java:604)
+at com.sleepycat.je.dbi.DbEnvPool.getEnvironment(DbEnvPool.java:210)
+at com.sleepycat.je.Environment.makeEnvironmentImpl(Environment.java:246)
+at com.sleepycat.je.Environment.<init>(Environment.java:227)
+at com.sleepycat.je.Environment.<init>(Environment.java:170)
+...
+</pre>
+Note that the exception occurs before the Environment constructor returns.
+[#21493]
+</li><br>
+
+<li>
+Fixed a bug in <code>JoinCursor</code> that causes records to be incorrectly
+passed over (not returned) when the cursors are configured for read-uncommitted
+isolation mode, and a non-null <code>data</code> parameter is passed to
+<code>JoinCursor.getNext</code>.  Thanks to Arthur Brack for reporting this,
+debugging it, and telling us how to fix it!  [#21501]
+</li><br>
+
+<li>
+Made a minor performance improvement to avoid notifying the checkpointer that a
+write has occurred, when the checkpointer is already running.  This wasted
+overhead was sometimes noticeable in the internal
+<code>com.sleepycat.je.recovery.Checkpointer.wakeupAfterWrite</code> method.
+[#21106]
+</li><br>
+
+<li>
+Fixed a bug where a replication master could get an
+<code>InsufficientAcksException</code> even if it had been configured
+as Designated Primary, if it happened to lose the connection to the
+replica in the middle of waiting for the commit acknowledgement.
+[#21536]
+</li><br>
+
+</ol>
+
+<!-- =================================================== -->
+<hr>
+<h3 align="center"><u>Changes in 5.0.48</u></h3>
+<!-- =================================================== -->
+
+<ol>
+
+<li>
+Fixed a bug that caused an EnvironmentFailureException with LOG_FILE_NOT_FOUND,
+for example:
+<pre>
+com.sleepycat.je.EnvironmentFailureException: Environment invalid because of previous exception:
+(JE 5.0.34) fetchTarget of 0xc3d4/0x25dab parent IN=2372138 IN class=com.sleepycat.je.tree.IN
+lastFullVersion=0xc4ca/0xd2aad lastLoggedVersion=0xc4ca/0xd2aad parent.getDirty()=false state=0
+LOG_FILE_NOT_FOUND: Log file missing, log is likely invalid.
+Environment is invalid and must be closed.
+...</pre>
+The bug occurred after deleting a range of keys in a deferred-write database
+(DatabaseConfig.setDeferredWrite(true) or StoreConfig.setDeferredWrite(true)),
+closing the Environment, and then opening the Environment.  It is most likely
+to occur when deleting large numbers of consecutive keys, and when opening and
+closing the Environment often, with the log cleaner enabled.
+<p>
+Because a log file is incorrectly deleted as a result of this bug, restoring
+from a backup is necessary, i.e., there is no way to repair the environment.
+Many thanks to Vishal Vishnoi and Vladimir Egorov for reproducing the problem
+and helping us to diagnose it.
+<p>
+[#21348]
+</li><br>
+
+<li>
+Fixed a bug that caused an EnvironmentFailureException with LOG_FILE_NOT_FOUND,
+for example:
+<pre>
+com.sleepycat.je.EnvironmentFailureException: Environment invalid because of previous exception:
+(JE 5.0.34) fetchTarget of 0x1ced/0x3d3561b parent IN=116781 IN class=com.sleepycat.je.tree.BIN
+lastFullVersion=0xbc40/0x2ca3f3a lastLoggedVersion=0xbcc3/0x6a37712 parent.getDirty()=false state=0
+LOG_FILE_NOT_FOUND: Log file missing, log is likely invalid.
+Environment is invalid and must be closed.
+...</pre>
+The bug occurred when a preload (Database.preload or Environment.preload) was
+performed concurrently with other access to the database, including log
+cleaning.  For example, the bug could occur as a result of the following
+sequence:
+<ul>
+    <li>The Environment is opened with cleaner threads enabled, which is the
+    default setting.</li>
+    <li>The JE cleaner threads immediately start working and processing entries
+    for Database X.  This is very likely to occur if the
+    CLEANER_MIN_UTILIZATION setting has recently been increased, but can also
+    occur without changing settings.</li>
+    <li>After opening the Environment the application calls Database.preload or
+    Environment.preload to preload Database X.</li>
+</ul>
+<p>
+Because a log file is incorrectly deleted as a result of this bug, restoring
+from a backup is necessary, i.e., there is no way to repair the environment.
+We are in Diego's debt for not only <a href="https://forums.oracle.com/forums/thread.jspa?threadID=2365156">reporting</a>
+this bug on OTN, but for reproducing it repeatedly for us over an extended
+period of debugging, and finally testing the fix.
+<p>
+[#21319]
+</li><br>
+
+<li>
+Fixed a bug that could cause Btree corruption for databases with the following
+two characteristics:
+<ul>
+    <li>
+    A key comparator must be configured.  A comparator is configured by calling
+    <code>DatabaseConfig.setBtreeComparator</code> or
+    <code>DatabaseConfig.setDuplicateComparator</code>, or by implementing the
+    <code>Comparable</code> interface in a DPL key class.
+    </li>
+    <li>
+    Key prefixing must be enabled.  Key prefixing is enabled by calling
+    <code>DatabaseConfig.setKeyPrefixing(true)</code> and is enabled by default
+    for all databases configured for duplicates.  A database is configured for
+    duplicates explicitly using
+    <code>DatabaseConfig.setSortedDuplicates(true)</code>, or implicitly using
+    a DPL MANY_TO_XXX relationship (<code>Relationship.MANY_TO_ONE</code> or
+    <code>Relationship.MANY_TO_MANY</code>).
+</ul>
+The corruption causes corrupted keys, and could manifest itself in a number
+of ways.  For example, the comparator could throw an exception because the key
+is invalid, an operation could fail unexpectedly because the key is not found,
+internal operations such as log cleaning could fail, etc.
+<p>
+Thanks to Lee Saenz and the other folks at UnboundId for reporting this problem
+and reproducing it repeatedly for us during debugging.
+<p>
+[#21328]
+</li><br>
+
+<li>
+The following change log entry applies to the JE 4.1 product, but impacts the
+upgrade process from JE 4.1 to JE 5.0.
+<p>
+Fixed a bug in the DbPreUpgrade_4_1 and DbRepPreUpgrade_4_1 utilities that
+prevented them from working properly due to concurrent log cleaning activity
+while the utility is running.  The symptom of the bug is that, after running
+the utility without errors, when then opening the Environment with JE 5, the
+following exception would occur:
+  <pre>
+  com.sleepycat.je.EnvironmentFailureException: (JE 5.0.XX) Before upgrading to
+  JE 5.0, the following utility must be run using JE 4.1: DbPreUpgrade_4_1
+  using the JE old version. See the release notes.
+  </pre>
+WARNING: Due to this bug, JE 4.1.20 or later should be used to run the
+DbPreUpgrade_4_1 and DbRepPreUpgrade_4_1 utilities.  In addition, these
+utilities should be run for all environments, not just those with duplicates
+databases. See "Upgrade Procedure" above for information on running these
+utilities.
+<p>
+Thanks to Vinoth for <a href="https://forums.oracle.com/forums/message.jspa?messageID=10200511#10200511">reporting</a>
+the problem and helping us with the diagnosis and testing. [#21304]
+</li><br>
+
+<li>
+Fixed a bug that could cause unnecessary log cleaning when upgrading to JE 5.
+It could also cause an exception after upgrading such as the one below, when a
+Btree comparator is configured in a duplicates database:
+<pre>
+java.lang.ArrayIndexOutOfBoundsException
+at com.sleepycat.je.dbi.DupKeyData$TwoPartKeyComparator.compare(DupKeyData.java:200)
+at com.sleepycat.je.dbi.DupKeyData$TwoPartKeyComparator.compare(DupKeyData.java:167)
+at com.sleepycat.je.tree.Key.compareKeys(Key.java:187)
+at com.sleepycat.je.tree.IN.findEntry(IN.java:2205)
+at com.sleepycat.je.tree.Tree.searchSubTreeInternal(Tree.java:1414)
+at com.sleepycat.je.tree.Tree.searchSubTree(Tree.java:1310)
+at com.sleepycat.je.tree.Tree.search(Tree.java:1170)
+at com.sleepycat.je.cleaner.FileProcessor.processBINDelta(FileProcessor.java:1075)
+at com.sleepycat.je.cleaner.FileProcessor.processFile(FileProcessor.java:625)
+at com.sleepycat.je.cleaner.FileProcessor.doClean(FileProcessor.java:290)
+at com.sleepycat.je.cleaner.FileProcessor.onWakeup(FileProcessor.java:149)
+at com.sleepycat.je.utilint.DaemonThread.run(DaemonThread.java:162)
+at java.lang.Thread.run(Thread.java:662)
+</pre>
+Also fixed a bug that could result in an exception similar to the above:
+<pre>
+java.lang.ArrayIndexOutOfBoundsException
+at com.sleepycat.je.dbi.DupKeyData$TwoPartKeyComparator.compare(DupKeyData.java:200)
+at com.sleepycat.je.dbi.DupKeyData$TwoPartKeyComparator.compare(DupKeyData.java:167)
+at com.sleepycat.je.tree.Key.compareKeys(Key.java:188)
+at com.sleepycat.je.tree.IN.findEntry(IN.java:2247)
+at com.sleepycat.je.tree.IN.findEntry(IN.java:2168)
+at com.sleepycat.je.tree.IN.findParent(IN.java:3082)
+at com.sleepycat.je.tree.Tree.getParentINForChildIN(Tree.java:773)
+at com.sleepycat.je.tree.Tree.getParentINForChildIN(Tree.java:704)
+at com.sleepycat.je.cleaner.FileProcessor.findINInTree(FileProcessor.java:1228)
+at com.sleepycat.je.cleaner.FileProcessor.processIN(FileProcessor.java:1167)
+at com.sleepycat.je.cleaner.FileProcessor.processFile(FileProcessor.java:650)
+at com.sleepycat.je.cleaner.FileProcessor.doClean(FileProcessor.java:290)
+at com.sleepycat.je.cleaner.FileProcessor.onWakeup(FileProcessor.java:149)
+at com.sleepycat.je.utilint.DaemonThread.run(DaemonThread.java:162)
+at java.lang.Thread.run(Thread.java:722)
+</pre>
+This problem was originally
+<a href="https://forums.oracle.com/forums/thread.jspa?threadID=2377627">reported
+on OTN</a>.  [#21405]
+</li><br>
+
+<li>
+Fixed a bug that could cause <code>Environment.removeDatabase</code> or
+<code>truncateDatabase</code> to loop in a "livelock" pattern along with active
+log cleaner threads, where the <code>removeDatabase</code> or
+<code>truncateDatabase</code> thread is not making forward progress.  Also fix
+a bug that could cause this state to eventually cause an
+<code>EnvironmentFailureException</code> during a subsequent recovery, and
+prevent opening the environment.  [#20816]
+</li><br>
+
+<li>
+Fixed a bug that could cause a call
+to <code>Environment.checkpoint</code>
+or <code>Environment.close</code> to hang with the following stack
+trace. The can only happen in a replicated environment, and the most
+realistic situation that could provoke this is a call to
+Environment.close() while there are ongoing, concurrent write
+operations.
+<pre>
+at java.util.concurrent.CountDownLatch.await(CountDownLatch.java:253)
+at com.sleepycat.je.rep.vlsn.VLSNIndex.waitForVLSN(VLSNIndex.java:544)
+at com.sleepycat.je.rep.vlsn.VLSNIndex.awaitConsistency(VLSNIndex.java:1982)
+at com.sleepycat.je.rep.impl.RepImpl.awaitVLSNConsistency(RepImpl.java:1644)
+at com.sleepycat.je.recovery.Checkpointer.doCheckpoint(Checkpointer.java:726)
+at com.sleepycat.je.dbi.EnvironmentImpl.invokeCheckpoint(EnvironmentImpl.java:1938)
+at com.sleepycat.je.dbi.EnvironmentImpl.doClose(EnvironmentImpl.java:1644)
+</pre>
+[#20919]
+</li><br>
+
+<li>
+It is now possible to specify the receive buffer size to be used
+TCP connections used by JE HA:
+<ul>
+<li>
+The
+<code>com.sleepycat.je.rep.ReplicationConfig.REPLICA_RECEIVE_BUFFER_SIZE</code>
+parameter controls the buffer size of the TCP connection used to communicate changes
+between a replica and its master.
+</li>
+<li>The <code>setReceiveBufferSize(int)</code> and
+<code>getReceiveBufferSize()</code> methods of the class
+<code>com.sleepycat.je.rep.NetworkRestore</code> are used when copying
+log files between replication nodes for Network Restore.
+</li></ul>
+<br>
+The new default value associated with TCP connections is 1MB and
+provides good performance on most platforms. The 1MB default value represents a
+change in behavior from previous versions of JE where the buffer size was
+defaulted to that provided by the underlying OS. To continue using the old
+behavior specify a value of zero for the buffer size. Please consult the javadoc
+for further details. [#21002]
+</li><br>
+
+<li>
+Fix a DPL bug that prevented upgrading to JE 5.0 from an earlier release.  The
+bug applies only when a stored entity, written with an older release, is
+present and meets the following qualifications:
+<ul>
+    <li>The entity has a non-key field declared as type Object but containing a
+    String, and</li>
+    <li>this non-key field contains the same object (same String instance) as
+    the primary key field.</li>
+</ul>
+When such an entity was read with JE 5.0, an AssertionError was thrown, for
+example:
+<pre>
+java.lang.AssertionError
+at com.sleepycat.persist.impl.RecordInput.readObject(RecordInput.java:150)
+at com.sleepycat.persist.impl.ReflectionAccessor$ObjectAccess.read(ReflectionAccessor.java:442)
+at com.sleepycat.persist.impl.ReflectionAccessor.readNonKeyFields(ReflectionAccessor.java:300)
+at com.sleepycat.persist.impl.ComplexFormat$EvolveReader.readObject(ComplexFormat.java:2218)
+at com.sleepycat.persist.impl.PersistEntityBinding.readEntity(PersistEntityBinding.java:163)
+at com.sleepycat.persist.impl.PersistEntityBinding.entryToObjectInternal(PersistEntityBinding.java:107)
+at com.sleepycat.persist.impl.PersistEntityBinding.entryToObject(PersistEntityBinding.java:64)
+at com.sleepycat.persist.EntityValueAdapter.entryToValue(EntityValueAdapter.java:55)
+...
+</pre>
+[#21078]
+</li><br>
+
+<li>
+Add additional fixes to prevent looping and long operations times for
+<code>Environment.removeDatabase</code> and <code>truncateDatabase</code> (see
+[#20816] above).  The additional fixes address long operation times due to log
+cleaning with large file sizes in combination with eviction.  Also fix a bug
+that slows down log cleaning (contributing to the long operation times as well)
+when large numbers of databases are present, and not all databases are kept
+open by the application.  [#21015]
+</li><br>
+
+<li>
+Fix a bug that caused a NullPointerException such as the following (or a
+similar exception) during periods of heavy concurrent eviction.
+<pre>
+java.lang.NullPointerException
+com.sleepycat.je.tree.IN.get3ByteInt(IN.java:1251)
+com.sleepycat.je.tree.IN.getFileOffset(IN.java:1241)
+com.sleepycat.je.tree.IN.getLsn(IN.java:1039)
+com.sleepycat.je.cleaner.Cleaner.isEvictable(Cleaner.java:1117)
+com.sleepycat.je.tree.BIN.getChildEvictionType(BIN.java:337)
+com.sleepycat.je.tree.IN.getEvictionType(IN.java:3146)
+com.sleepycat.je.evictor.TargetSelector.selectIN(TargetSelector.java:129)
+com.sleepycat.je.evictor.Evictor.evictBatch(Evictor.java:612)
+...
+</pre>
+[#21015]
+</li><br>
+
+<li>
+In general BDB JE is not sensitive to the JVM default encoding and all text --
+both in stored data and in network protocols -- is encoded as UTF-8.  However,
+several exceptions to this rule have been discovered and are addressed in this
+patch release.
+<ul>
+    <li>
+    For HA apps, host and node names in the replication network protocol are
+    currently encoded using the JVM default encoding.  A new configuration
+    parameter (ReplicationConfig.PROTOCOL_OLD_STRING_ENCODING) can be set to
+    false to use UTF-8 encoding instead.  In the next JE release this parameter
+    will be set to false by default, and we strongly recommend that all
+    impacted applications explicitly set it to false before then.  See the
+    parameter javadoc for more information, including a definition of which
+    applications are impacted and restrictions on performing a hot upgrade.
+    </li>
+    <li>
+    The DbPrintLog utility has been changed to assume UTF-8 encoding of keys
+    when the "-k text" option is used.  Previously it assumed the default
+    encoding.  Since key-values are normally portable, UTF-8 is a better
+    assumption.
+    </li>
+    <li>
+    When DbDump is used in aggressive salvage mode (-R), a bug was fixed where
+    database names were assumed to be stored internally in default encoding,
+    when actually they are stored in UTF-8 encoding.  If the default encoding
+    and UTF-8 do not match, for the characters in the database name, then
+    DbDump would fail.
+    </li>
+    <li>
+    Several issues were fixed in unit tests that causes failures when run with
+    a JVM default encoding that is not a superset of ASCII.
+    </li>
+</ul>
+[#20967]
+</li><br>
+
+<li>
+Fixed a bug where JE internal threads throw UnsupportedOperationException on a
+JVM where CPU time measurement is not supported by the
+java.lang.management.ThreadMXBean implementation.  For example, this is not
+supported in the IBM JVM for z/OS.  [#20967]
+</li><br>
+
+<li>
+Fixed a bug where the following exception could be thrown during heavy
+concurrent write and read operations.  This did not cause data loss and did not
+invalidate the Environment instance.
+<pre>
+com.sleepycat.je.EnvironmentFailureException:
+(JE 5.0.34) com.sleepycat.je.utilint.RelatchRequiredException
+UNEXPECTED_EXCEPTION: Unexpected internal Exception, may have side effects.
+at com.sleepycat.je.EnvironmentFailureException.unexpectedException(EnvironmentFailureException.java:286)
+at com.sleepycat.je.tree.BIN.fetchTarget(BIN.java:1268)
+at com.sleepycat.je.Cursor.checkForInsertion(Cursor.java:3006)
+at com.sleepycat.je.Cursor.retrieveNextAllowPhantoms(Cursor.java:2926)
+at com.sleepycat.je.Cursor.retrieveNextNoDups(Cursor.java:2789)
+at com.sleepycat.je.Cursor.retrieveNext(Cursor.java:2763)
+at com.sleepycat.je.Cursor.getNext(Cursor.java:1116)
+...
+</pre>
+Thanks to OTN user user591209 for
+<a href="http://forums.oracle.com/forums/thread.jspa?threadID=2333786">reporting</a>
+this and testing the fix.  [#21121]
+</li><br>
+
+<li>
+The configuration parameters:
+<code>ReplicationConfig.REPLAY_MAX_OPEN_DB_HANDLES</code> and
+<code>ReplicationConfig.REPLAY_DB_HANDLE_TIMEOUT</code> have been
+deprecated. Please use the mutable configuration parameters:
+<code>ReplicationMutableConfig.REPLAY_MAX_OPEN_DB_HANDLE</code> and
+<code>ReplicationMutableConfig.REPLAY_DB_HANDLE_TIMEOUT</code> instead. This
+change also fixes a bug which resulted in the values associated with these
+parameters being used incorrectly.
+[#21144]
+</li><br>
+
+<li>
+Fix a DPL bytecode generation issue related to Java 1.7 by upgrading the DPL
+bytecode generator to use ASM 4.0.  Previously, if the DPL were compiled for
+the Java 1.7 bytecode target, an exception such as the following would occur
+when running the application:
+<pre>
+Exception in thread "main" java.lang.VerifyError:
+Expecting a stackmap frame at branch target 115 in method
+com.sleepycat.persist.impl.CollectionProxy.copyElements
+(Lcom/sleepycat/persist/impl/RecordInput;Lcom/sleepycat/persist/impl/Format;
+Lcom/sleepycat/persist/impl/Format;Ljava/util/Set;)V at offset 33
+at java.lang.Class.forName0(Native Method)
+at java.lang.Class.forName(Class.java:264)
+at com.sleepycat.persist.model.EntityModel.classForName(EntityModel.java:280)
+at com.sleepycat.persist.model.AnnotationModel.getClassMetadata(AnnotationModel.java:91)
+at com.sleepycat.persist.impl.PersistCatalog.addProxiedClass(PersistCatalog.java:528)
+at com.sleepycat.persist.impl.PersistCatalog.init(PersistCatalog.java:399)
+at com.sleepycat.persist.impl.PersistCatalog.<init>(PersistCatalog.java:218)
+at com.sleepycat.persist.impl.Store.<init>(Store.java:177)
+at com.sleepycat.persist.EntityStore.<init>(EntityStore.java:111)
+</pre>
+This issue did not normally arise when using a downloaded JE jar file, because
+the JE library is compiled with a Java 1.5 bytecode target.  It would arise,
+however, if JE were explicitly compiled with a Java 1.7 bytecode target, or
+with Java 1.7 and no specified target.  A workaround for this issue was to
+specify -XX:-UseSplitVerifier when running Java; this is no longer necessary.
+[#20586]
+</li><br>
+
+<li>
+Fixed a bug that sometimes caused a ConcurrentModificationException when
+calling Environment.setMutableConfig, when exception listeners were previously
+configured.  [#21177]
+</li><br>
+
+<li>
+Fixed a bug that caused an erroneous SecondaryIntegrityException to be thrown,
+or an OperationStatus.KEYEXIST to be returned, when using a JoinCursor with
+READ_UNCOMMITTED isolation.  The erroneous exception or return value occurred
+when performing reads using the JoinCursor concurrently with updates or
+deletions of the same records.  [#21258]
+</li><br>
+
+<li>
+Change Database.close and Transaction.abort so they fail silently when called
+after already being closed/aborted/committed, and the Environment is invalid
+due to an earlier EnvironmentFailureException.  Previously, an
+EnvironmentFailureException was thrown under these conditions.  The new
+behavior is consistent with Cursor.close and avoids unnecessary exception
+handling.  [#21264]
+</li><br>
+
+<li>
+Fix a bug that sometimes caused a ConcurrentModificationException when calling
+Environment.close, while a Transaction is beginning or ending.  For example:
+<pre>
+java.util.ConcurrentModificationException
+    at java.util.HashMap$HashIterator.nextEntry(HashMap.java:793)
+    at java.util.HashMap$KeyIterator.next(HashMap.java:828)
+    at com.sleepycat.je.Environment.checkOpenTxns(Environment.java:469)
+    at com.sleepycat.je.Environment.checkForCloseErrors(Environment.java:409)
+    at com.sleepycat.je.Environment.close(Environment.java:368)
+</pre>
+Although never reported, a similar problem could occur if Databases are open.
+[#21279]
+</li><br>
+
+<li>
+Fixed a bug that caused DiskOrderedCursor.getNext to hang when it is called
+after OperationStatus.NOTFOUND was returned previously.  [#21282]
+</li><br>
+
+<li>
+Added additional replication statistics to
+com.sleepycat.je.rep.ReplicatedEnvironmentStats. These stats can be retrieved by
+the new methods:
+<ol>
+<li>ReplicatedEnvironmentStats.getTotalTxnMs()<li>
+<li>getNMaxReplicaLag()</li>
+<li>getNMaxReplicaLagName()</li>
+<li>getNTxnsAcked()getAckWaitMs()</li>
+<li>getNTxnsNotAcked()</li>
+<li>getTotalTxnMs()</li>
+<li>getAckWaitMs()</li>
+</ol>
+The javadoc for these methods contains the descriptions associated with these
+new statistics.
+</li><br>
+
+<li>
+Fixed several issues with XAEnvironment.end.
+  <ul>
+  <li>Previously an XAException was thrown if the transaction was not
+  suspended.  This is no longer the case.</li>
+  <li>XAException is thrown when TMSUSPEND is passed and the transaction
+  is already suspended.</li>
+  <li>XAException is thrown if the Xid is unknown.</li>
+  <li>XAException is thrown if TMSUCCESS, TMFAIL or TMSUSPEND is not
+  passed.</li>
+  </ul>
+[#21309]
+</li><br>
+
+<li>
+Added the <code>Transaction.getState()</code> method and
+<code>Transaction.State</code> enumeration to formalize the different states of
+a transaction, and in particular to indicate whether a transaction commit is in
+an undetermined state (<code>Transaction.State.POSSIBLY_COMMITTED</code>) when
+a failure occurs during the commit process.  Also added an internal pre-flight
+check, just before making a commit durable, to narrow the time window where the
+<code>Transaction.State.POSSIBLY_COMMITTED</code> state can occur.  See the new
+javadoc for more details.  [#21264]
+</li><br>
+
+<li>
+Exposed an environment configuration parameter that was previously
+undocumented: <code>EnvironmentConfig.EVICTOR_CRITICAL_PERCENTAGE</code>.  This
+parameter can be set to improve operation latency under certain conditions.
+See the javadoc for more information.
+<p>
+Also improved eviction to avoid acquiring a per-database exclusive latch for
+each Btree node that is evicted.  This appeared in thread dumps as follows:
+<pre>
+"JEEvictor" daemon prio=3 tid=0x000000000a28e000 nid=0x197 waiting on condition [0xfffffc7fcd8b8000]
+   java.lang.Thread.State: WAITING (parking)
+    at sun.misc.Unsafe.park(Native Method)
+    - parking to wait for  <0xfffffc701242b048> (a java.util.concurrent.locks.ReentrantReadWriteLock$NonfairSync)
+    at java.util.concurrent.locks.LockSupport.park(LockSupport.java:156)
+    at java.util.concurrent.locks.AbstractQueuedSynchronizer.parkAndCheckInterrupt(AbstractQueuedSynchronizer.java:811)
+    at java.util.concurrent.locks.AbstractQueuedSynchronizer.acquireQueued(AbstractQueuedSynchronizer.java:842)
+    at java.util.concurrent.locks.AbstractQueuedSynchronizer.acquire(AbstractQueuedSynchronizer.java:1178)
+    at java.util.concurrent.locks.ReentrantReadWriteLock$WriteLock.lock(ReentrantReadWriteLock.java:807)
+    at com.sleepycat.je.latch.SharedLatch.acquireExclusive(SharedLatch.java:95)
+    at com.sleepycat.je.latch.SharedLatch.acquireShared(SharedLatch.java:135)
+    at com.sleepycat.je.tree.IN.latchShared(IN.java:484)
+    at com.sleepycat.je.tree.Tree.searchSubTreeInternal(Tree.java:1508)
+    at com.sleepycat.je.tree.Tree.searchSubTree(Tree.java:1329)
+    at com.sleepycat.je.tree.Tree.search(Tree.java:1189)
+    at com.sleepycat.je.dbi.CursorImpl.searchAndPosition(CursorImpl.java:2064)
+    at com.sleepycat.je.dbi.CursorImpl.searchAndPosition(CursorImpl.java:1983)
+    at com.sleepycat.je.dbi.DbTree.getDb(DbTree.java:1535)
+    at com.sleepycat.je.dbi.DbTree.getDb(DbTree.java:1471)
+    at com.sleepycat.je.dbi.DbTree.getDb(DbTree.java:1459)
+    at com.sleepycat.je.evictor.Evictor.evictBatch(Evictor.java:633)
+    at com.sleepycat.je.evictor.Evictor.doEvict(Evictor.java:542)
+    at com.sleepycat.je.evictor.Evictor$BackgroundEvictTask.run(Evictor.java:1205)
+    at java.util.concurrent.ThreadPoolExecutor$Worker.runTask(ThreadPoolExecutor.java:886)
+    at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:908)
+    at java.lang.Thread.run(Thread.java:662)
+</pre>
+Thanks to Jerome Arnou for diagnosing this issue.  [#21106]
+</li><br>
+
+<li>
+Fixed a latch deadlock that occurs under rare conditions when assertions are
+enabled.  The partial stack trace below shows where the latch is taken
+incorrectly:
+<pre>
+...
+com.sleepycat.je.latch.SharedLatch.acquireExclusive(SharedLatch.java:95)
+com.sleepycat.je.tree.IN.latch(IN.java:473)
+com.sleepycat.je.tree.IN.latch(IN.java:508)
+com.sleepycat.je.tree.BIN.containsCursor(BIN.java:467)
+com.sleepycat.je.dbi.CursorImpl.setBIN(CursorImpl.java:386)
+com.sleepycat.je.tree.Tree.findBinForInsert(Tree.java:2198)
+...</pre>
+Thanks to Arthur Brack for reporting this issue. [#21395]
+</li><br>
+
+<li>
+Log all RuntimeExceptions (not only DatabaseExceptions) when the
+Environment.cleanLog method is called.  Previously, RuntimeExceptions were
+logged when the built-in cleaner thread was used, but not when cleanLog was
+called directly.  Also ensure that when a RuntimeException is thrown by a
+user's key or duplicate comparator, the exception does not prevent latches from
+being properly released.  [#21328]
+</li><br>
+
+</ol>
+
+<!-- =================================================== -->
+<hr>
+<h3 align="center"><u>Changes in 5.0.34</u></h3>
+<!-- =================================================== -->
+
+<h3><a name="Features">New Features:</a></h3>
+<ol>
+<li>
+A new class, DiskOrderedCursor has been added which lets an
+application iterate over records in a Database in unsorted order, in
+order to improve retrieval speed. This can be useful when the
+application needs to scan all records in a database, and will be
+applying filtering logic which does not need key ordered
+retrieval. The cursor optimizes the iteration by walking in Log
+Sequence Number (LSN) order rather than key order. LSN order
+approximates disk sector order, and retrieving in disk order reduces
+I/O cost.
+<p>
+A DiskOrderedCursor can be obtained via
+<code>Database.openCursor(DiskOrderedCursorConfig)</code>. Note that
+creating an instance of the DiskOrderedCursor disables the file
+deletion done by log cleaning until the <code>close()</code> method
+has been called. See the javadoc for DiskOrderedCursor for more
+detailed information. [#15260]
+</li><br>
+
+<li>
+A new <code>Environment.preload(Databases[], PreloadConfig)</code>
+method has been added which permits preloading multiple databases
+via a single method call rather than multiple calls
+to <code>Database.preload()</code>.
+Preload is implemented to optimize I/O cost by fetching the records of a Database by disk
+order, so that disk access is are sequential rather than
+random. Using the multi-database <code>Environment.preload()</code>
+lets the preload operation batch
+the records for all of the target Databases so that
+multiple scans over the log are not necessary.
+<p>
+A progress mechanism has also been added which lets a caller of
+the <code>preload()</code> method receive feedback on whether progress
+is being made.  See
+<code>com.sleepycat.je.ProgressListener</code> and
+<code>com.sleepycat.je.PreloadConfig.setProgressListener()</code>.
+<p>
+Two new configurations are available to bound the amount of memory
+used by preload processing, at the expense of preload
+performance. <code>com.sleepycat.je.PreloadConfig.setLSNBatchSize()</code>
+can be used to direct preload to partition its work into batches., In
+addition, <code>com.sleepycat.je.PreloadConfig.setInternalMemoryLimit()</code>
+can be used to limit the amount of memory outside of the JE cache used
+by preload.
+[#15260] [#18153] [#19306]
+</li><br>
+
+<li>
+The JE environment can now be spread across multiple subdirectories.
+Environment subdirectories may be used to spread an environment's
+*.jdb files over multiple directories, and therefore over multiple
+disks or file systems.  Environment subdirectories reside in the
+environment home directory and are named data001/ through dataNNN/,
+consecutively, where NNN is the value of je.log.nDataDirectories.  A
+typical configuration would be to have each of the dataNNN/ names be
+symbolic links to actual directories which each reside on separate
+file systems or disks.
+<p>
+Environment subdirectories are enabled through
+the <code>je.log.nDataDirectories</code> environment parameter.  If 0
+(the default), all log files (*.jdb) will reside in the environment
+home directory passed to the Environment constructor.  A non zero
+value indicates the number of environment subdirectories to use for
+holding the environment's log files.
+<p>
+If data subdirectories are used (i.e. je.log.nDataDirectories > 0),
+this parameter must be set when the environment is initially created.
+Like the environment home directory, each and every one of the
+dataNNN/ subdirectories must also be present and writable.  This
+parameter must be set to the same value for all subsequent openings of
+the environment or an exception will be thrown.
+<p>
+If the set of existing dataNNN/ subdirectories is not equivalent to
+the set { 1 ... je.log.nDataDirectories } when the environment is
+opened, an EnvironmentFailureException will be thrown, and the
+Environment will fail to be opened.
+<p>
+<code>DbBackup.getLogFilesInBackupSet()</code> now returns the subdirectory
+name and file separator prepended to the file name if
+je.log.nDataDirectories > 0. [#19125]
+</li><br>
+
+<li>
+A new class, com.sleepycat.je.rep.AppStateMonitor lets the HA
+application add more application specific information to the notion of
+node state in a replication group. It's meant to support more
+application specific semantics when assessing the availability of a
+given node member. [#18046]
+</li><br>
+
+<li>
+New options have been added for changing the host of a JE replication
+node, and for moving a JE replication group. See the Utilities section.
+</li><br>
+
+<li>
+Applications may now specify a custom java.util.logging.Handler per
+Environment. Logging messages generated by JE will go to this
+handler. See EnvironmentConfig.setLoggingHandler() and the
+memo <a href="traceLogging.html">Using JE trace logging</a>. [#19110]
+</li><br>
+
+<li>
+Replicated nodes can now be opened in UNKNOWN state, to support read
+only operations in a replicated system when a master is not
+available. Prior to JE 5, replicated nodes could only be opened in
+MASTER or REPLICA state, and if a master could not be elected, the
+node could not be opened. This is enabled through the new
+configuration parameter: ReplicationConfig.ENV_UNKNOWN_STATE_TIMEOUT.
+Please review its javadoc for further details.
+[#19338]
+</li><br>
+
+<li>
+The master node in a replication group now rebroadcasts election
+results on a periodic basis, to help restore normal functioning of a
+replication group after a network partition has been resolved. The
+default period is a minute and can be modified by the new
+ReplicationConfig parameter
+ReplicationConfig.ELECTIONS_REBROADCAST_PERIOD. Please review its
+javadoc for further details. [#20220]
+</li> <br>
+
+<li>
+A new listener mechanism is available to give the application feedback
+about potentially long running activities such as environment startup
+(recovery), replication stream syncup, and database preload. See
+com.sleepycat.je.ProgressListener and its related enums,
+com.sleepycat.je.RecoveryProgress, com.sleepycat.je.rep.SyncupProgress
+and com.sleepycat.je.PreloadConfig.Phases. [#20043]
+</li><br>
+
+<li>
+New methods were added to allow quickly skipping over a specified number of
+key/value pairs using a cursor.  For details, see the javadoc for
+<code>Cursor.skipNext</code> and <code>Cursor.skipPrev</code>.  [#19165]
+</li><br>
+
+<li>
+A per-Environment ClassLoader may now be configured and will be used by JE for
+loading all user-supplied classes, including btree comparators, duplicate
+comparators, class instances serialized by SerialBinding, and DPL persistent
+classes.  This is useful when separate ClassLoaders are used for the JE jar
+file and the application's classes, for example, when running under an
+application server framework.  The ClassLoader is configured using
+<code>EnvironmentConfig.setClassLoader</code>.  Related changes are:
+  <ul>
+      <li>The new <code>com.sleepycat.util.ClassResolver</code> class defines
+      and implements the class loading policy.</li>
+
+      <li>If a btree or duplicated comparator needs to be initialized before it
+      is used or needs access to the environment's ClassLoader property, it may
+      implement the new <code>com.sleepycat.je.DatabaseComparator</code>
+      interface.</li>
+
+      <li>The <code>com.sleepycat.bind.serial.Catalog</code> interface has a
+      new method, <code>getClassLoader</code>, that is used to supply the
+      ClassLoader to the <code>SerialBinding</code>.  This method is
+      implemented by the <code>StoredClassCatalog</code> class, and returns
+      the environment's ClassLoader property.  As a result,
+      <code>SerialBinding.getClassLoader</code> now returns the environment's
+      ClassLoader property.
+      </li>
+
+      <li>The <code>com.sleepycat.persist.model.EntityModel.classForName</code>
+      static method has been deprecated in favor of the new
+      <code>EntityModel.resolveClass</code> method, which honors the
+      environment's ClassLoader property.</li>
+  </ul>
+[#18368]
+</li><br>
+
+<li>
+The <code>java.io.Closeable</code> interface is now implemented by all JE
+classes and interfaces with a <code>public void close()</code> method.  This
+allows using these objects with the Java 1.7 try-with-resources statement, for
+applications compiled and run with Java 1.7 or later.  See
+<a href="http://download.oracle.com/javase/7/docs/api/java/lang/AutoCloseable.html">AutoCloseable</a>,
+which is a superinterface of <code>java.io.Closeable</code> in Java 1.7.
+<p>
+The following JE classes and interfaces now implement <code>Closeable</code>,
+and on Java 1.7 <code>AutoCloseable</code>.
+<pre>
+com.sleepycat.bind.serial.ClassCatalog
+com.sleepycat.bind.serial.StoredClassCatalog
+com.sleepycat.collections.StoredIterator
+com.sleepycat.persist.EntityCursor
+com.sleepycat.persist.EntityJoin
+com.sleepycat.persist.EntityStore
+com.sleepycat.persist.ForwardCursor
+com.sleepycat.persist.raw.RawStore
+com.sleepycat.je.jca.ra.JEConnection
+com.sleepycat.je.Cursor
+com.sleepycat.je.Database
+com.sleepycat.je.DiskOrderedCursor
+com.sleepycat.je.Environment
+com.sleepycat.je.ForwardCursor
+com.sleepycat.je.JoinCursor
+com.sleepycat.je.SecondaryDatabase
+com.sleepycat.je.Sequence
+com.sleepycat.je.trigger.Trigger
+</pre>
+[#20559]
+</li><br>
+
+<li>
+The <code>Environment.flushLog</code> method has been added. It can be used to
+make durable, by writing to the log, all preceding non-transactional write
+operations, as well as any preceding transactions that were committed with
+no-sync durability.  To flush buffered data for durability reasons, with the
+addition of this method it is no longer necessary to perform a checkpoint, call
+<code>Environment.sync</code>, or commit a transaction (with sync or
+write-no-sync durability).  [#19111]
+
+<li>
+Fix a bug where the wrong stack trace was sometimes output for an owner or
+waiter thread, when using
+<code>EnvironmentConfig.TXN_DEADLOCK_STACK_TRACE</code> for debugging.
+</li><br>
+</li>
+
+</ol>
+<!-- ================================================= -->
+<h3><a name="API">API Changes:</a></h3>
+<ol>
+
+<li>
+Made the EnvironmentConfig and ReplicationConfig classes Serializable. [#19241]
+</li><br>
+
+<li>
+The <code>je.env.fairLatches</code> environment parameter has been deprecated
+and no longer has any effect.
+</li><br>
+
+<li>
+The behavior, although not the syntax or intent, of
+<code>EnvironmentConfig.CHECKPOINTER_BYTES_INTERVAL</code> has changed.
+Previously, this interval defined the byte distance between the end of one
+checkpoint and the start of the next.  Now it defines the byte distance between
+the start of one checkpoint and start of the next.  In other words, now the
+interval includes the checkpoint itself, which in some cases can be large.
+This now more accurately reflects the intention of the parameter, which is to
+bound the recovery interval, which is proportional to the time to recover (open
+the <code>Environment</code>) after a crash.  It does mean, however, that
+checkpoints may occur more often for the same configured interval, and some
+applications may wish to adjust their configured setting accordingly.  [#19704]
+</li><br>
+
+<li>
+<code>Cursor.getSearchBothRange</code> for a non-duplicates database has been
+corrected to behave exactly as <code>Cursor.getSearchBoth</code>.  Previously
+<code>getSearchBothRange</code> returned a data item that was greater or equal
+to the data search parameter, which was incorrect.  Now it only returns a data
+item that is equal to the data search parameter.  [#19165]
+</li><br>
+
+<li>
+See the description of the new ProgressListener class in the New
+Features section above.
+</li><br>
+
+<li>
+The default value for <code>EnvironmentConfig.CLEANER_LAZY_MIGRATION</code> has
+been changed from true to false.  Over several releases the benefits of setting
+this to true have decreased and are now less than the benefits of setting it to
+false.  See the javadoc for this parameter for details.  [#20588]
+</li>
+</ol>
+
+<!-- ================================================= -->
+<h3><a name="General">Performance and other General Changes</a></h3>
+<ol>
+<li>
+Performance of record update and deletion operations has been significantly
+improved when the record is not in the JE cache and the application does not
+need to read the record prior to performing the update or deletion.
+Previously, the old version of the record was always read into cache, if not
+already present, by the update or deletion operation.  If the record was not
+already in cache, this often resulted in an expensive random I/O.  Now, because
+of internal changes to record locking, records are not read by update or
+deletion operations, and this can significantly reduce random I/O for delete or
+update-heavy workloads.  An exception to this rule is when a record is updated
+or deleted in a primary database that has associated secondary indices.  In
+this case, the primary record must be read in order to update the secondary
+indices.
+<p>
+As a result of this change, the log cleaner must now sometimes estimate the
+size of records that are made obsolete by updates and deletions, and must
+sometimes "probe" a log file to determine record sizes.  Several statistics
+have been added to show this activity in the
+<code>com.sleepycat.je.EnvironmentStats</code> class:
+<ul>
+    <li><code>getCorrectedAvgLNSize</code></li>
+    <li><code>getEstimatedAvgLNSize</code></li>
+    <li><code>getNCleanerProbeRuns</code></li>
+</ul>
+The <code>DbSpace</code> utility now also prints the first two of these new
+statistics.
+<p>
+[#18633]
+</li><br>
+
+<li>
+Made an internal format change for databases with duplicate keys that improves
+operation performance, reduces memory and disk overhead, and increases
+concurrency.  The format change requires that databases configured for
+duplicates (including DPL secondary keys with a MANY_TO_XXX relationship)
+created with JE 4.1 or earlier must be converted to the new duplicates format.
+The conversion is done automatically when first opening the environment with JE
+5.0.  The conversion is described in the Upgrade Procedure section at the top
+of this page.
+<p>
+<em>Internal Format Change</em>
+<p>
+This information is included for users who understand Btree internals and wish
+to know what changed internally.
+<ul>
+    <li>
+    Previously, for each unique key in a database with duplicates, a separate
+    Btree for that key was used to store the duplicates for that key.  In
+    addition, a leaf node (record) per key was stored to hold the duplicate
+    count.  The separate Btree was found to add unnecessary memory and disk
+    overhead, and the maintenance of the duplicate count was found to decrease
+    concurrency.  The new format does not use a separate Btree per key, and
+    instead uses an internal two-part key. A duplicate count per key is no
+    longer stored or maintained.
+    </li>
+    <li>
+    The first part of the new internal two-part key is the user key and the
+    second part is the user data.  JE translates between the internal key and
+    the user key and data, and adapts the get, put, etc, API operations to work
+    with new internal key format.  To reduce memory overhead, key prefixing is
+    always enabled for databases with duplicates.  Note that in a database with
+    duplicates, the internal data size is always zero because the user data is
+    stored as the second part of the internal key.
+    </li>
+</ul>
+<p>
+<em>Performance Improvements</em>
+<ul>
+    <li>
+    The size of the reduction in memory and disk overhead depends on how many
+    duplicates for each key are present.  The improvement is largest when the
+    number of duplicates per key is small.  For example, in a data set of 10
+    million records, 10 duplicates per key, and 8 byte key and 8 byte data
+    lengths, the total memory and disk usage are reduced by approximately 40%.
+    Operation performance is improved as a side effect of this reduced
+    overhead.  For larger numbers of duplicates per key the improvement will be
+    smaller, and vice-versa.
+    </li>
+    <li>
+    The increase in concurrency applies when records are inserted and deleted.
+    Previously, when one transaction performed an insertion or deletion of a
+    duplicate for a given key, until this transaction ended no other
+    transaction could read or write to any other duplicate for that key.  Now,
+    other transactions are prevented only from accessing the specific duplicate
+    that was inserted or deleted, according to the isolation mode in use.  The
+    degree of increased concurrency depends on how many transactions/threads
+    access duplicates for the same key.  In general the impact will be larger
+    when there are more duplicates per key.
+    </li>
+    <li>
+    Operation performance is also improved during reads, when the cache size is
+    not large enough to hold all LNs or the cache is cold.  Previously, the
+    leaf node for each duplicate was read from disk when not already in cache.
+    Now, leaf nodes are not read from disk during a normal read operation and
+    therefore random I/O is reduced.  For the data set described above (10
+    million records, 10 duplicates per key, 8 byte key and data), loaded in
+    random key order, when starting with a cold cache the duration of a full
+    scan in key order was improved by approximately 800%.  This is a worst case
+    test scenario for the old duplicate format, and the improvement will be
+    smaller in tests with different parameters.
+</ul>
+<p>
+<em>Other Behavioral Changes</em>
+<ul>
+    <li>
+    Without key prefixing, databases with duplicates would store keys
+    inefficiently.  Therefore, key prefixing is now mandatory and automatically
+    enabled for all databases with duplicates.  When duplicates are configured,
+    the application does not have to call
+    <code>DatabaseConfig.setKeyPrefixing(true)</code>.  If
+    <code>DatabaseConfig.setKeyPrefixing(false)</code> is called for a database
+    with duplicates configured, an <code>IllegalStateException</code> is
+    thrown.
+    </li>
+    <li>
+    With this change, determining the number of duplicates per key
+    (<code>Cursor.count</code>) is more costly than it was previously.
+    Previously, the count was stored and could be returned by reading a single
+    record for the key.  Now, to determine the count precisely JE must traverse
+    internal Btree nodes to count the duplicates for the key.  If you are using
+    <code>Cursor.count</code>, consider using the new method
+    <code>Cursor.countEstimate</code> instead.
+    <code>Cursor.countEstimate</code> returns a rough estimate of the count
+    using a fixed cost algorithm. Since <code>Cursor.count</code> is primarily
+    intended for use in query optimizations, the
+    <code>Cursor.countEstimate</code> method may be a good substitute.  For
+    example, <code>JoinCursor</code> now uses <code>Cursor.countEstimate</code>
+    rather than <code>Cursor.count</code> to determine the index processing
+    order.  Likewise, <code>EntityCursor.countEstimate</code> is a potential
+    substitute for <code>EntityCursor.count</code>.  </li>
+    <li>
+    Btree partial comparators may now be used with databases configured for
+    duplicates.  See <code>DatabaseConfig.setBtreeComparator</code> for
+    information on partial comparators.  Previously, Btree partial comparators
+    could be use only with non-duplicate databases.
+    </li>
+    <li>
+    The following methods are deprecated and no longer have any effect, or in
+    the case of getter methods, now always return zero or null.
+    <ul>
+        <li><code>DatabaseConfig.setNodeMaxDupTreeEntries</code></li>
+        <li><code>DatabaseConfig.getNodeMaxDupTreeEntries</code></li>
+        <li><code>BtreeStats.getDuplicateBottomInternalNodeCount</code></li>
+        <li><code>BtreeStats.getDupCountLeafNodeCount</code></li>
+        <li><code>BtreeStats.getDuplicateInternalNodeCount</code></li>
+        <li><code>BtreeStats.getDuplicateTreeMaxDepth</code></li>
+        <li><code>BtreeStats.getDINsByLevel</code></li>
+        <li><code>BtreeStats.getDBINsByLevel</code></li>
+        <li><code>PreloadStats.getNDINsLoaded</code></li>
+        <li><code>PreloadStats.getNDBINsLoaded</code></li>
+        <li><code>PreloadStats.getNDupCountLNsLoaded</code></li>
+    </ul>
+</ul>
+[#19165]
+</li><br>
+
+<li>
+An improvement has been made that requires significantly less writing per
+checkpoint, less writing during eviction, and less metadata overhead in the JE
+on-disk log files.
+<p>
+Previously, delta log entries for bottom internal nodes, called BINDeltas, were
+written by checkpoints rather than writing full BINs, and full BINs were
+written less frequently (see <code>EnvironmentConfig.TREE_MAX_DELTA</code> and
+<code>TREE_BIN_DELTA </code>).  This is still the case.  However, the approach
+taken previously required that the same delta information be repeatedly written
+at each checkpoint, even it had not changed since the last checkpoint.  Now,
+delta information is only written when it changes.
+<p>
+By significantly reducing writing, the new approach provides overall
+performance improvements.  However, there is also an additional cost to the new
+approach: When a BIN is not in cache, fetching the BIN now often requires two
+random reads instead of just one; one read to fetch the BINDelta and another to
+fetch the last full BIN.  For applications where all active BINs fit in cache,
+this adds to the I/O cost of initially populating the cache.  For applications
+where active BINs do not fit in cache, this adds to the per-operation cost of
+fetching a record (an LN) when its parent BIN is not in cache.  In our tests,
+the lower write rate more than compensates for the additional I/O of fetching
+the BINDelta, but the benefit is greatest when all BINs fit in cache.
+<p>
+[#19671]
+</li><br>
+
+<li>
+Improvements were made to recovery (Environment open) performance by changing
+the behavior of checkpoints in certain cases.  Recovery should always be very
+quick after the following types of checkpoints:
+  <ul>
+  <li>When <code>CheckpointConfig.setMinimizeRecoveryTime(true)</code> is used
+  along with an explicit checkpoint performed by calling the
+  <code>Environment.checkpoint</code> method.</li>
+  <li>When <code>Environment.sync</code> is called.</li>
+  <li>When <code>Environment.close</code> is called, since it performs a final
+  checkpoint.</li>
+  </ul>
+In addition, a problem was fixed where periodic checkpoints (performed by the
+checkpointer thread or by calling <code>Environment.checkpoint</code>) would
+cause long recovery times under certain circumstances.
+<p>
+As a part of this work, the actions invoked by
+ReplicatedEnvironment.shutdownGroup() were streamlined to use the
+setMinimizeRecoveryTime() option and to reduce spurious timeouts
+during the shutdown processing.  [#19559]
+</li><br>
+
+<li>
+Node fanouts (see <code>DatabaseConfig.setNodeMaxEntries</code>s) are now
+mutable and persistent database attributes. They were previously permitted to
+mutate, but the changed attribute value wasn't saved persistently, so the new
+value might sometimes revert to the previously existing setting. This has been
+fixed.  In addition, the javadoc for DatabaseConfig has been expanded to
+clarify what attributes are mutable vs. fixed, persistent vs temporary.
+[#18262]
+</li><br>
+
+<li>
+The internal Database ID field has been enlarged from a 32-bit (int) quantity
+to a 64-bit (long) quantity.  A Database ID value is assigned from a single
+sequence in each Environment for each Database created and truncated.  This
+change therefore increases the total number of Databases that can be created
+and the number of truncate operations that can be performed over the lifetime
+of an Environment.  Note that one bit of the ID is used to distinguish
+replicated from local databases, so the total number of Databases and truncate
+operations per Environment is now effectively 2^63.  [#18540]
+</li><br>
+
+<li>
+Fixed a bug that replicated parameters in je.properties can't be recognized if
+opening a read only standalone Environment on a replicated Environment home.
+[#19080]
+</li><br>
+
+<li>
+Added <code>Implementation-Title</code>, <code>Implementation-Version</code>,
+<code>Implementation-Vendor</code>, <code>Implementation-URL</code> entries to
+the <code>je.jar MANIFEST.MF</code> file. [#19320]
+</li><br>
+
+<li>
+Added a check to make sure that a log write buffer is never larger than the
+size of a log file. [#19324]
+</li><br>
+
+<li>
+Fix a problem that caused high CPU utilization during log cleaning, as in the
+following stack trace.
+<pre>
+"Cleaner-5" daemon prio=10 tid=0x00002aaae8008800 nid=0xaeb runnable [0x0000000042ac9000]
+java.lang.Thread.State: RUNNABLE
+at com.sleepycat.je.cleaner.OffsetList.contains(OffsetList.java:132)
+at com.sleepycat.je.cleaner.TrackedFileSummary.containsObsoleteOffset(TrackedFileSummary.java:169)
+at com.sleepycat.je.cleaner.FileProcessor.processFile(FileProcessor.java:495)
+at com.sleepycat.je.cleaner.FileProcessor.doClean(FileProcessor.java:243)
+locked <0x00002aaab0652408> (a com.sleepycat.je.cleaner.FileProcessor)
+at com.sleepycat.je.cleaner.FileProcessor.onWakeup(FileProcessor.java:140)
+at com.sleepycat.je.utilint.DaemonThread.run(DaemonThread.java:162)
+at java.lang.Thread.run(Thread.java:662)
+</pre>
+[#19626]
+</li><br>
+
+<li>
+Added support for truncating and removing a single database in the same
+transaction. Previously, if this was attempted the Environment.removeDatabase
+method this would throw an exception, and subsequently the application would
+have to abort the transaction.  Now, this is allowed.  [#19636]
+</li><br>
+
+<li>
+Added <code>EnvironmentConfig.TREE_COMPACT_MAX_KEY_LENGTH</code> for user
+configuration of the in-memory compaction of keys in the Btree.  Previously,
+in-memory keys were compacted but the key size threshold was fixed at 16 bytes.
+Now the key size threshold is configurable and has a 16 byte default value.
+For more information, see the
+<code>EnvironmentConfig.TREE_COMPACT_MAX_KEY_LENGTH</code> javadoc.  [#20120]
+</li><br>
+
+<li>
+Fixed a problem where a <code>Database</code> handle kept a reference to the
+environment after it was closed.  Added the following warning to the
+<code>close()</code> method javadoc for all JE handles.
+    <pre>
+    WARNING: To guard against memory leaks, the application should discard
+    all references to the closed handle.  While BDB makes an effort to discard
+    references from closed objects to the allocated memory for an environment,
+    this behavior is not guaranteed.  The safe course of action for an
+    application is to discard all references to closed BDB objects.</pre>
+[#20302]
+</li><br>
+
+<li>
+The JE HA Monitor, com.sleepycat.je.rep.monitor.Monitor is now more
+proactive about discovering group status changes that occur while it
+is has no network connectivity. The monitor could miss replication
+group changes if it was down, or isolated due to a network
+partition. In JE 4.1, the Monitor would not receive that information,
+and would not be able to alert the application. In JE 5, the Monitor
+periodically and proactively checks replication group status in order
+to update its own notion of group status, and will send the
+appropriate notifications to the application.
+</li><br>
+
+<li>
+Fixed a problem arising from a network partition event, that would
+result in an unnecessary rollback of committed transactions. This
+problem typically manifests itself in the application receiving a
+RollbackProhibitedException if the number of transactions exceeds
+je.rep.txnRollbackLimit. The following describes a scenario leading to
+the problem:
+<p>
+<ol>
+<li> Consider a three node replication group: A, B, C with A as the
+master and nodes: B, C serving as replicas. </li>
+<li> A network partition isolates A from B and C, resulting in
+the partitions: (A) and (B,C).</li>
+<li> B and C hold and election and B becomes the master.</li>
+<li> There are now two masters: the pre-existing A which is isolated
+and cannot perform durable writes, and a newly elected B.</li>
+<li> The majority side (B,C) is accessible and continues to make
+progress performing durable writes.</li>
+<li> The master on the majority side B goes down. There is now no
+master on the (B,C) side since there is no quorum. </li>
+<li> Some time later, the partition is healed. </li>
+<li> C now sees A as an established master and syncs with it
+potentially rolling back committed transactions as a result.
+</li>
+</ol>
+<p>
+The fix changes the final step above so that an election is held
+before the rollback is allowed to proceed. The election results in C
+being elected the new master. Node A encounters a
+MasterReplicaTransitionException which it must handle by
+closing and re-opening its environment handle so it can resume
+operations as a replica. [#20258] [#20572]
+</li><br>
+
+<li>
+Fix a bug where a temporary database record was unnecessarily locked during log
+cleaning, and this also caused an assertion to fire in
+<code>FileProcessor.processFoundLN</code>. This only occurs when temporary
+databases are used and <code>Environment.CLEANER_LAZY_MIGRATION</code> is set
+to false, which is now the default in JE 5.  [#20670]
+</li><br>
+
+<li>
+Fixed a bug seen in replicated environments which would manifest as
+the following stack trace. This was a transient problem and there was no
+corruption to the persistent data, but the application would be
+required to close and reopen the ReplicatedEnvironment instance.
+<pre>
+
+(JE 5.0.30) node2(2):/tmp/scaleDir2/env Couldn't find bucket for GTE VLSN 299,617,391 in database.
+ EndBucket = <VLSNBucket fileNum=25137(0x6231) numOffsets=7 stride=10
+             firstVLSN=299,617,410 lastVLSN=299,617,477 lastLsn=0x6231/0xaf37d/>
+  tracker = first=298,966,283 last=299,617,477 sync=299,617,458
+         txnEnd=299,617,458  firstTracked=-1 lastOnDiskVLSN=299,617,477
+UNEXPECTED_STATE_FATAL: Unexpected internal state, unable to continue.
+Environment is invalid and must be closed.
+at com.sleepycat.je.EnvironmentFailureException.unexpectedState(EnvironmentFailureException.java:391)
+at com.sleepycat.je.rep.vlsn.VLSNIndex.getGTEBucketFromDatabase(VLSNIndex.java:911)
+at com.sleepycat.je.rep.vlsn.VLSNIndex.getGTEBucket(VLSNIndex.java:780)
+at com.sleepycat.je.rep.vlsn.VLSNIndex.access$000(VLSNIndex.java:308)
+at com.sleepycat.je.rep.vlsn.VLSNIndex$ForwardVLSNScanner.getLsn(VLSNIndex.java:2119)
+at com.sleepycat.je.rep.vlsn.VLSNIndex$ForwardVLSNScanner.getApproximateLsn(VLSNIndex.java:2081)
+at com.sleepycat.je.rep.stream.FeederReader.scanForwards(FeederReader.java:224)
+at com.sleepycat.je.rep.stream.MasterFeederSource.getWireRecord(MasterFeederSource.java:62)
+at com.sleepycat.je.rep.impl.node.Feeder$OutputThread.run(Feeder.java:762)
+</pre>
+[#20726]
+</li><br>
+
+<li>
+Fixed a bug in the processing of internal BDBJE metadata which would
+result in the following stack trace when a replicated environment was
+re-opened:
+<pre>
+java.lang.IndexOutOfBoundsException: Index: 110, Size: 110
+    at java.util.ArrayList.RangeCheck(ArrayList.java:547)
+    at java.util.ArrayList.get(ArrayList.java:322)
+    at com.sleepycat.je.rep.vlsn.VLSNBucket.findPopulatedIndex(VLSNBucket.java:441)
+    at com.sleepycat.je.rep.vlsn.VLSNBucket.removeFromTail(VLSNBucket.java:730)
+    at com.sleepycat.je.rep.vlsn.VLSNIndex.pruneDatabaseTail(VLSNIndex.java:1087)
+    at com.sleepycat.je.rep.vlsn.VLSNIndex.merge(VLSNIndex.java:1274)
+    at com.sleepycat.je.rep.vlsn.VLSNIndex.init(VLSNIndex.java:1161)
+    at com.sleepycat.je.rep.vlsn.VLSNIndex.<init>(VLSNIndex.java:382)
+    at com.sleepycat.je.rep.impl.RepImpl.preRecoveryCheckpointInit(RepImpl.java:374)
+    at com.sleepycat.je.recovery.RecoveryManager.recover(RecoveryManager.java:238)
+    at com.sleepycat.je.dbi.EnvironmentImpl.finishInit(EnvironmentImpl.java:549)
+    at com.sleepycat.je.dbi.DbEnvPool.getEnvironment(DbEnvPool.java:237)
+    at com.sleepycat.je.Environment.makeEnvironmentImpl(Environment.java:229)
+    at com.sleepycat.je.Environment.<init>(Environment.java:211)
+    at com.sleepycat.je.Environment.<init>(Environment.java:176)
+    at com.sleepycat.je.rep.ReplicatedEnvironment.<init>(ReplicatedEnvironment.java:443)
+    at com.sleepycat.je.rep.ReplicatedEnvironment.<init>(ReplicatedEnvironment.java:318)
+    at com.sleepycat.je.rep.ReplicatedEnvironment.<init>(ReplicatedEnvironment.java:379)
+</pre>
+There was no corruption to the persistent data, but without this fix,
+the environment would repeatedly fail to open. [#20796]
+</li><br>
+
+<li>
+Fix a bug where key prefixing (<code>DatabaseConfig.setKeyPrefixing</code>) was
+not effective when keys are inserted in sequential order, for example, during a
+bulk load in key order.  Without any updates, deletions or non-sequential
+insertions, the prefix information was not persistent and therefore not used
+after closing and re-opening the Environment.  In addition, during sequential
+insertion more cache space than necessary was used under certain circumstances.
+These problems did not occur with non-sequential insertion.  [#20799]
+</li><br>
+
+<li>
+Improved <code>DbCacheSize</code> utility to take into account memory
+management enhancements and improve accuracy. Added support for key prefixing
+(<code>-keyprefix</code>), databases configured for sorted duplicates
+(<code>-duplicates</code>), and replicated environments
+(<code>-replicated</code>).  Environment config params and replication config
+params may also be specified, since they impact memory usage as well.
+<p>
+The old <code>-density</code> argument has been replaced by
+<code>-orderedinsertion</code>.  The old <code>-overhead</code> argument has
+been removed, and the utility prints the minimum environment memory overhead.
+<p>
+See the <code>DbCacheSize</code> javadoc for more information.  It now includes
+a discussion of how cache memory is used and how it can be reduced using
+environment and database configuration options.  [#20145]
+</li><br>
+
+<li>
+Fix a bug where an endless loop occurs when calling a
+<code>SecondaryCursor</code> method that moves the cursor to an existing
+record.  This occurs when both of the following conditions are true:
+<p>
+<ol>
+    <li>The cursor operation is performed with READ_UNCOMMITTED isolation,
+    via use of a LockMode or CursorConfig with this setting.</li>
+    <li>The secondary index has been corrupted, for example, by not using
+    transactions to update the primary or secondary.</li>
+</ol>
+</p>
+Thanks to user9057793 for
+<a href="https://forums.oracle.com/forums/thread.jspa?forumID=273&threadID=2298806">reporting</a> this on OTN.
+[#20822]
+</li><br>
+
+<li>
+Fix a problem where methods that return the database count (Database.count,
+EntityIndex.count, StoredMap.size, etc) would sometimes an incorrect value due
+to concurrent JE background activity (log cleaning or IN compression, for
+example).  The API contract for the count methods is that they return a correct
+value as long as there is no application write activity.  [#20798]
+</li><br>
+
+</ol>
+<!-- ================================================= -->
+<h3><a name="DPL">Direct Persistence Layer (DPL), Collections and Bind packages</a></h3>
+<ol>
+
+<li>New bindings for sorted, or naturally ordered, packed integers are now
+available.  The new bindings allow using packed integers in record keys, and
+provide natural sort order without a custom comparator.  The API additions are:
+<ul>
+    <li><code>com.sleepycat.bind.tuple.SortedPackedIntegerBinding</code> -- new class</li>
+    <li><code>com.sleepycat.bind.tuple.SortedPackedLongBinding</code> -- new class</li>
+    <li><code>com.sleepycat.bind.tuple.TupleInput</code> -- new methods: <code>readSortedPackedInt, getSortedPackedIntByteLength, readSortedPackedLong, getSortedPackedLongByteLength</code>.</li>
+    <li><code>com.sleepycat.bind.tuple.TupleOutput</code> -- new methods: <code>writeSortedPackedInt, writeSortedPackedLong</code>.</li>
+    <li><code>com.sleepycat.util.PackedInteger</code> -- new methods: <code>readSortedInt, readSortedLong, getReadSortedIntLength, getReadSortedLongLength, writeSortedInt, writeSortedLong, getWriteSortedIntLength, getWriteSortedLongLength</code>.</li>
+</ul>
+<p>See the <code>com.sleepycat.bind.tuple</code> package description for an
+overview of the new bindings and a comparative description of all tuple
+bindings.  [#18379]</p>
+</li><br>
+
+<li>
+Two bindings for the <code>java.math.BigDecimal</code> data type are now
+available.
+<ul>
+    <li>The sorted format allows using <code>BigDecimal</code> values in record
+    keys, and provides natural sort order without a custom comparator.  The API
+    additions are:</li>
+    <ul>
+        <li><code>com.sleepycat.bind.tuple.SortedBigDecimalBinding</code> -- new class</li>
+        <li><code>com.sleepycat.bind.tuple.TupleInput</code> -- new methods: <code>readSortedBigDecimal, getSortedBigDecimalByteLength</code>.</li>
+        <li><code>com.sleepycat.bind.tuple.TupleOutput</code> -- new methods: <code>writeSortedBigDecimal, getSortedBigDecimalMaxByteLength</code>.</li>
+    </ul>
+    <li>The unsorted <code>BigDecimal</code> format does not provide natural
+    sort order and is not intended for use in record keys, but has two
+    advantages over the sorted format: trailing zeros after the decimal place
+    are preserved, and a more compact, faster serialization format is used.
+    The API additions are:</li>
+    <ul>
+        <li><code>com.sleepycat.bind.tuple.BigDecimalBinding</code> -- new class</li>
+        <li><code>com.sleepycat.bind.tuple.TupleInput</code> -- new methods: <code>readBigDecimal, getBigDecimalByteLength</code>.</li>
+        <li><code>com.sleepycat.bind.tuple.TupleOutput</code> -- new methods: <code>writeBigDecimal, getBigDecimalMaxByteLength</code>.</li>
+    </ul>
+</ul>
+<p>See the <code>com.sleepycat.bind.tuple</code> package description for an
+overview of the new bindings and a comparative description of all tuple
+bindings.  [#18379]</p>
+</li><br>
+
+<li>
+<code>java.math.BigDecimal</code> is now defined as a built-in DPL simple data
+type.  This means that <code>BigDecimal</code> values may be stored in DPL
+persistent objects, and fields of type <code>BigDecimal</code> may be defined
+as primary or secondary keys.  The sorted <code>BigDecimal</code> format is
+always used in the DPL, and this provides natural sort order without a custom
+comparator.  However, trailing zeros after the decimal place are stripped,
+meaning that precision is not preserved.</p>
+<p>If the application has previously defined a <code>PersistentProxy</code> for
+<code>BigDecimal</code>, special considerations are necessary when upgrading
+to this release:</p>
+<ul>
+    <li>
+    The call to <code>EntityModel.registerClass</code> for the
+    <code>BigDecimal</code> proxy class must be removed.  If it is not removed,
+    an <code>IllegalArgumentException</code> will be thrown by the
+    <code>EntityStore</code> constructor.  In general, proxies for built-in
+    simple types are not allowed.
+    </li>
+    <li>
+    Even though the <code>BigDecimal</code> proxy class is not registered, the
+    proxy class must be available for reading <code>BigDecimal</code> values
+    that were written via the proxy, prior to this release.
+    Rewriting (updating) an entity will convert the proxied
+    <code>BigDecimal</code> value to the new built-in <code>BigDecimal</code>
+    format.  To convert all entities explicitly and efficiently, the
+    <code>EntityStore.evolve</code> method may be used.
+    After converting all entities using the proxied values, if you additionally
+    wish to remove the proxy class itself then you must supply a
+    <code>Deleter</code> mutation for the proxy class.
+    </li>
+    <li>
+    To use such a field, that was previously stored via a
+    <code>BigDecimal</code> proxy class, as a secondary key, the application
+    must first explicitly evolve the index using
+    <code>EntityStore.evolve</code>, or update all values.  Then the
+    <code>@SecondaryKey</code> annotation may be added to create a new
+    secondary index.
+    </li>
+</ul>
+<p>[#18379]</p>
+</li><br>
+
+<li>
+Thanks to a contribution from Dave Brosius, a built-in proxy has been added for
+the <code>java.util.LinkedHashMap</code>. <code>LinkedHashMap</code> may now be
+used as the type of any persistent field. [#20055]
+</li><br>
+
+<li>
+Fixed a problem with <code>MANY_TO_ONE</code> and <code>MANY_TO_MANY</code>
+secondary index ordering when a <code>Comparable</code> key class is used for
+the primary key.
+
+<p>In general, for <code>MANY_TO_ONE</code> and <code>MANY_TO_MANY</code>
+secondary indexes, more than one entity may have the same secondary key.  When
+iterating over entities in secondary key order, the ordering of entities is by
+primary key within secondary key.  For example, if Employee entities with an
+integer ID primary key are iterated using a String department secondary key,
+the iteration order is by integer ID within (grouped by) department.</p>
+
+<p>In prior releases, when a <code>Comparable</code> key class is used for the
+primary key, the <code>Comparable</code> defines the order of entities in the
+primary index.  However, the <code>Comparable.compareTo</code> method is not
+used to determine primary key ordering within secondary key.  Instead, the
+natural order of the primary keys is used.  In our example, if the primary key
+class implements <code>Comparable</code> to order entities in decreasing
+integer order, the iteration order is incorrectly in natural integer order
+(increasing) within department.  This has been fixed and the order for newly
+created secondary indexes now uses the <code>Comparable</code>, and in our
+example the iteration order is now decreasing integer order within
+department.</p>
+
+<p>However, because the ordering of an existing index cannot be changed, the
+old ordering will apply for secondary indexes created prior to this release.
+To cause the correct ordering to be used for an existing index, you must
+delete the database for the secondary index.  The next time the index is
+opened (via <code>EntityStore.getSecondaryIndex</code>) the index will be
+regenerated in the correct order.  To delete the index database, first
+determine the database name; see the Database Names section of the
+<code>EntityStore</code> javadoc.  Then, before opening the
+<code>EntityStore</code>, delete the index database using
+<code>Environment.removeDatabase</code>. [#17252]
+</li><br>
+
+<li>
+Fix a bug where if a null value was stored using the Collections API, it could
+not be read.  An exception such as the following would occur:
+<pre>
+com.sleepycat.util.RuntimeExceptionWrapper: java.io.EOFException
+at java.io.ObjectInputStream$BlockDataInputStream.peekByte(ObjectInputStream.java:2554)
+at java.io.ObjectInputStream.readObject0(ObjectInputStream.java:1297)
+at java.io.ObjectInputStream.readObject(ObjectInputStream.java:351)
+at com.sleepycat.bind.serial.SerialBinding.entryToObject(SerialBinding.java:141)
+at com.sleepycat.collections.DataView.makeValue(DataView.java:597)
+at com.sleepycat.collections.DataCursor.getCurrentValue(DataCursor.java:350)
+at com.sleepycat.collections.StoredContainer.getValue(StoredContainer.java:304)
+at com.sleepycat.collections.StoredMap.get(StoredMap.java:240)
+</pre>
+Now null values can be stored and read, as long as the value binding supports
+null values.  Note that null values are not supported when entity bindings are
+used, such as when using the DPL.  Thanks to 'annie' on OTN for
+<a href="http://forums.oracle.com/forums/thread.jspa?threadID=1124842">reporting</a>
+the problem.  [#18633]
+</li><br>
+
+<li>
+A field in a DPL entity may now refer to its enclosing entity object.
+Previously, an IllegalArgumentException was thrown in this situation.  Note
+that references to <em>other</em> entities (not the enclosing object) are not
+permitted.  Thanks to Trevor (tkram01) on OTN for
+<a href="http://forums.oracle.com/forums/thread.jspa?threadID=931467">reporting</a>
+the problem.  [#17525]
+</li><br>
+
+<li>
+Fix a bug where adding new secondary keys into an abstract entity class caused
+an error.  An exception such as the following would occur:
+<pre>
+com.sleepycat.je.EnvironmentFailureException: java.lang.InstantiationException UNEXPECTED_EXCEPTION:
+Unexpected internal Exception, may have side effects.
+at com.sleepycat.je.EnvironmentFailureException.unexpectedException(EnvironmentFailureException.java:286)
+at com.sleepycat.compat.DbCompat.unexpectedException(DbCompat.java:494)
+at com.sleepycat.persist.impl.ReflectionAccessor.newInstance(ReflectionAccessor.java:157)
+at com.sleepycat.persist.impl.ComplexFormat.checkNewSecKeyInitializer(ComplexFormat.java:475)
+at com.sleepycat.persist.impl.ComplexFormat.initialize(ComplexFormat.java:451)
+at com.sleepycat.persist.impl.Format.initializeIfNeeded(Format.java:542)
+at com.sleepycat.persist.impl.PersistCatalog.init(PersistCatalog.java:454)
+at com.sleepycat.persist.impl.PersistCatalog.<init>(PersistCatalog.java:221)
+at com.sleepycat.persist.impl.Store.<init>(Store.java:186)
+at com.sleepycat.persist.EntityStore.<init>(EntityStore.java:185)
+</pre>
+Now adding new secondary keys into abstract entity classes is allowed in the
+DPL.  Thanks to user 786189 on OTN for
+<a href="http://forums.oracle.com/forums/thread.jspa?threadID=2137081">reporting</a>
+the problem.  [#19358]
+</li><br>
+
+<li>
+An <code>IllegalStateException</code> is now thrown when calling
+<code>EntityStore.setSequenceConfig</code> and the sequence has already been
+opened via a call to <code>EntityStore.getPrimaryIndex</code>.  This is the
+behavior previously specified in the javadoc for
+<code>setSequenceConfig</code>. Thanks to patriciaG on OTN for
+<a href="http://forums.oracle.com/forums/thread.jspa?threadID=2134564">reporting</a>
+the problem. [#19356]
+</li><br>
+
+<li>
+An exception will be thrown when storing an enum class with constant-specific methods by DPL:
+<pre>
+java.lang.IllegalArgumentException: Class could not be loaded or is not persistent.
+</pre>
+Now storing an enum class with constant-specific methods is allowed in the
+DPL.  Thanks to Mikhail Barg  on OTN for
+<a href="http://forums.oracle.com/forums/thread.jspa?threadID=1035332">reporting</a>
+the problem.  [#18357]
+</li><br>
+
+<li>
+<p>
+Allows to register enum or array types by
+EntityModel.registerClass. This new feature will be useful when enum
+or array classes are unknown for DPL but will be used in converter
+mutation.</p>
+<p>
+Also collects the related formats for the Map or Collection types in
+the FieldInfo.collectRelatedFormats, e.g., creates an EnumFormat for
+MyEnum class when meeting Map&lt;String, MyEnum&gt;.</p> Thanks to
+James on OTN for <a
+href="http://forums.oracle.com/forums/thread.jspa?threadID=2126809">reporting</a>
+the problem.  [#19377]
+</li><br>
+
+<li>
+The performance of serializing/deserializing String data in DPL has
+been improved by treating String type as a primitive type.  Treating
+String type as a primitive type in DPL does not need to stored the
+format ID, and directly uses
+TupleInput.readString/TupleOutput.writeString to serialize/deserialize
+String data.
+<p>
+In our benchmark, there are 500,000 records containing only String
+fields, and the size of each record is 180 bytes. With such changes,
+the reading performance gains 14% improvement, and the writing
+performance gains 10% improvement. [#19247]
+</p>
+</li><br>
+
+<li>
+PrimaryIndex.get operation has been improved by avoiding deserialize
+the known primary key when deserializing an entity.  Instead, the
+known primary key is directly set to the primary key field by the
+accessor.
+<p>
+In our benchmark, there are 500,000 records. The primary key in each
+record is a composite key containing an integer field and a String
+field, and the size of each record is 180 bytes. With such change, the
+performance of PrimaryIndex.get operation (reads 500,000 records, uses
+pre-load mode to avoid I/O process) gains nearly 10% improvement.
+</p>
+The improvement will be more significant if there is a large and
+complex primary key and small data. [#19248]
+</li>
+</ol>
+<!-- ================================================= -->
+<h3><a name="Utilities">Utility Changes:</a></h3>
+<ol>
+<li>
+A fix has been made for a bug which allowed an Environment to be
+closed while a DbBackup was in progress.  This could cause a checksum
+exception (but not data loss).
+An <code>EnvironmentFailureException</code> is now thrown by
+Environment.close() if the last open <code>Environment</code> handle
+is closed between calls to <code>DbBackup.startBackup()</code>
+and <code>DbBackup.endBackup()</code>. [19207]
+</li><br>
+
+<li>
+The DbGroupAdmin utility and ReplicationGroupAdmin class now provide a
+new updateAddress() method which lets the user change the hostname and
+port of a member of a JE replication group.  This new functionality is
+useful when a node must be moved to a new host. [#18632]
+</li><br>
+
+<li>
+A new utility, com.sleepycat.je.rep.util.DbResetRepGroup, has been
+added to reset the members of a replication group, replacing the group
+with a new group consisting of a single new member. This utility is
+useful when a copy of an existing replicated environment needs to be
+used at a different site, with the same data, but with a different
+initial node that can be used to grow the replication group as usual,
+such as may be the case when an application is moved from a staging to
+a production environment. The utility can also be used to change the
+group name associated with the environment.
+[#19886]
+</li><br>
+
+</ol>
+<!-- ================================================= -->
+<h3><a name="IandI">Documentation, Installation and Integration:</a></h3>
+<ol>
+<li>
+A new upgrade how-to section for replicated applications, "Upgrading a
+JE Replication Group," is now available in the Administration chapter
+(Chapter 7) of the "Getting Started with JE High Availability" guide.
+</li><br>
+
+<li>
+Several additions to the backup process were made to the DbBackup javadoc.
+<ol>
+    <li>A checkpoint should be performed before calling startBackup, to reduce
+    recovery time after a restore.</li>
+    <li>Log files should be verified before being copied to the backup set.</li>
+    <li>A list of the current files in the environment should be obtained
+    and used to avoid unused files after a restore.</li>
+    <li>Incremental backups are now documented in more detail.</li>
+</ol>
+See the DbBackup javadoc for details.  [#19894]
+</li><br>
+
+<li>
+Added javadoc in several places recommending the use of compressed oops, as
+well as a warning that it will not be honored by JE (and JE cache memory will
+be wasted) unless it is specified explicitly on the Java command line.  For
+example, see <code>EnvironmentConfig.setCacheSize</code>.
+</li><br>
+
+</ol>
+</body>
+</html>
